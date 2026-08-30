@@ -222,33 +222,30 @@
 		makefolder(library.directory .. path)
 	end 
 
-	-- Font: try to download the pixel font, fall back to Gotham if unavailable
+	-- Font: download pixel font via request() so 404s don't throw, fall back to Gotham
 	local font_loaded = false
-	pcall(function()
-		local font_urls = {
-			"https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf",
-			"https://github.com/i77lhm/Libraries/raw/refs/heads/main/Atlanta/fonts/fs-tahoma-8px.ttf",
+
+	local ok, res = pcall(request, {
+		Url    = "https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf",
+		Method = "GET",
+	})
+
+	if ok and res and res.StatusCode == 200 and res.Body and #res.Body > 1000 then
+		writefile("ffff.ttf", res.Body)
+		local tahoma = {
+			name  = "SmallestPixel7",
+			faces = {{
+				name    = "Regular",
+				weight  = 400,
+				style   = "normal",
+				assetId = getcustomasset("ffff.ttf"),
+			}},
 		}
-		for _, url in ipairs(font_urls) do
-			local ok, data = pcall(function() return game:HttpGet(url) end)
-			if ok and data and #data > 1000 then
-				writefile("ffff.ttf", data)
-				local tahoma = {
-					name = "SmallestPixel7",
-					faces = {{
-						name    = "Regular",
-						weight  = 400,
-						style   = "normal",
-						assetId = getcustomasset("ffff.ttf")
-					}}
-				}
-				writefile("dddd.ttf", http_service:JSONEncode(tahoma))
-				library.font = Font.new(getcustomasset("dddd.ttf"), Enum.FontWeight.Regular)
-				font_loaded = true
-				break
-			end
-		end
-	end)
+		writefile("dddd.ttf", http_service:JSONEncode(tahoma))
+		library.font = Font.new(getcustomasset("dddd.ttf"), Enum.FontWeight.Regular)
+		font_loaded  = true
+	end
+
 	if not font_loaded then
 		library.font = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular)
 	end
