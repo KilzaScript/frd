@@ -1,4 +1,4 @@
--- REASON: Dumbass customer put their library in a request and flexed his non existant security and ended up getting it leaked by himself... 😭
+-- REASON: Dumbass customer put their library in a request and flexed his non existant security and ended up getting it leaked by himself... ðŸ˜­
 -- The code here is horrendous this is my 2nd library, the added on code was made to suit the old code however I should have just converted to a newer version of my code kind of an oopsie. 
 
 -- variables
@@ -222,31 +222,14 @@
 		makefolder(library.directory .. path)
 	end 
 
-	-- Font: download pixel font via request() so 404s don't throw, fall back to Gotham
-	local font_loaded = false
-
-	local ok, res = pcall(request, {
-		Url    = "https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf",
-		Method = "GET",
-	})
-
-	if ok and res and res.StatusCode == 200 and res.Body and #res.Body > 1000 then
-		writefile("ffff.ttf", res.Body)
-		local tahoma = {
-			name  = "SmallestPixel7",
-			faces = {{
-				name    = "Regular",
-				weight  = 400,
-				style   = "normal",
-				assetId = getcustomasset("ffff.ttf"),
-			}},
-		}
-		writefile("dddd.ttf", http_service:JSONEncode(tahoma))
+	-- Font: use request() so 404s never throw, fall back to Gotham
+	local _fok, _fres = pcall(request, {Url="https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf", Method="GET"})
+	if _fok and _fres and _fres.StatusCode == 200 and _fres.Body and #_fres.Body > 1000 then
+		writefile("ffff.ttf", _fres.Body)
+		local _ft = {name="SmallestPixel7",faces={{name="Regular",weight=400,style="normal",assetId=getcustomasset("ffff.ttf")}}}
+		writefile("dddd.ttf", http_service:JSONEncode(_ft))
 		library.font = Font.new(getcustomasset("dddd.ttf"), Enum.FontWeight.Regular)
-		font_loaded  = true
-	end
-
-	if not font_loaded then
+	else
 		library.font = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular)
 	end
 
@@ -1707,8 +1690,8 @@
 				:keybind({callback = window.set_menu_visibility, key = Enum.KeyCode.Insert})
 
 				-- RightShift also toggles the menu
-				library:connection(uis.InputBegan, function(input, game_processed)
-					if not game_processed and input.KeyCode == Enum.KeyCode.RightShift then
+				library:connection(uis.InputBegan, function(input, gp)
+					if not gp and input.KeyCode == Enum.KeyCode.RightShift then
 						window.set_menu_visibility(not window.opened)
 					end
 				end)
@@ -1821,6 +1804,7 @@
 				window.esp_section = column:section({name = "Main"})
 			--  
 
+
 			return setmetatable(window, library)
 		end
 
@@ -1931,315 +1915,126 @@
 		end 
 
 		function library:esp_preview(properties)
-			local cfg = {items = {}, rotation = 0; objects = {};}
-
-			-- Wait for character to exist before cloning
-			local character
-			if lp.Character then
-				lp.Character.Archivable = true
-				character = lp.Character:Clone()
-			else
-				lp.CharacterAdded:Wait()
-				lp.Character.Archivable = true
-				character = lp.Character:Clone()
+			local cfg = {items={}, rotation=0, objects={}}
+			if not lp.Character then lp.CharacterAdded:Wait() end
+			lp.Character.Archivable = true
+			local character = lp.Character:Clone()
+			for _,s in ipairs(character:GetDescendants()) do
+				if s:IsA("Script") or s:IsA("LocalScript") or s:IsA("ModuleScript") then s:Destroy() end
 			end
-
-			-- Remove scripts so the clone doesn't animate or interfere
-			for _, s in ipairs(character:GetDescendants()) do
-				if s:IsA("Script") or s:IsA("LocalScript") or s:IsA("ModuleScript") then
-					s:Destroy()
-				end
-			end
-
-			local items = cfg.items; do 
-				items.viewportframe = library:create( "ViewportFrame" , {
-					Parent = self.holder;
-					BackgroundTransparency = 1;
-					Size = dim2(1, 0, 0, 220);
-					BorderColor3 = rgb(0, 0, 0);
-					ZIndex = 1;
-					Position = dim2(0, 0, 0, 10);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-				
-				items.camera = library:create( "Camera" , {
-					FieldOfView = 70;
-					CameraType = Enum.CameraType.Track;
-					Focus = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
-					CFrame = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
-					Parent = ws;
-					Name = "\0"
-				}); 
-
-				items.viewportframe.CurrentCamera = items.camera
-				character.Parent = items.viewportframe
-
-				-- Position camera to frame the character nicely
-				items.camera.CFrame = CFrame.new(0, 2, 5) * CFrame.Angles(0, math.rad(180), 0)
-				items.camera.CameraSubject = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("HumanoidRootPart")
-
-				library:connection(run.RenderStepped, function()
-					cfg.rotation += 0.4
-					local hrp = character:FindFirstChild("HumanoidRootPart")
-					if hrp then
-						hrp.CFrame = CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(cfg.rotation), 0)
-					end
-				end)
-			end 
-
-			-- Safe color defaults — read live from flags if they exist, else use white
-			local function safe_color(flag_name)
-				local f = flags[flag_name]
-				return (f and f.Color) or rgb(255, 255, 255)
-			end
-
-			local objects = cfg.objects; do 
-				objects[ "holder" ] = library:create( "Frame" , {
-					Parent = items.viewportframe;
-					Name = "\0";
-					BackgroundTransparency = 1;
-					Position = dim2(0.5, 0, 0.5, 10);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(0, 135, 0, 190);
-					BorderSizePixel = 0;
-					AnchorPoint = vec2(0.5, 0.5);
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-				
-				objects[ "box_outline" ] = library:create( "UIStroke" , {
-					Parent = library.cache;
-					LineJoinMode = Enum.LineJoinMode.Miter
-				});
-				
-				objects[ "name" ] = library:create( "TextLabel" , {
-					FontFace = library.font;
-					Parent = library.cache;
-					TextColor3 = safe_color("Name_Color");
-					BorderColor3 = rgb(0, 0, 0);
-					Text = string.format("%s (@%s)", lp.DisplayName, lp.Name);
-					Name = "\0";
-					TextStrokeTransparency = 0;
-					AnchorPoint = vec2(0, 1);
-					Size = dim2(1, 0, 0, 0);
-					BackgroundTransparency = 1;
-					Position = dim2(0, 0, 0, -5);
-					BorderSizePixel = 0;
-					AutomaticSize = Enum.AutomaticSize.Y;
-					TextSize = 12;
-				});
-				
-				objects[ "box_handler" ] = library:create( "Frame" , {
-					Parent = library.cache;
-					Name = "\0";
-					BackgroundTransparency = 1;
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-				
-				objects[ "box_color" ] = library:create( "UIStroke" , {
-					Color = safe_color("Box_Color");
-					LineJoinMode = Enum.LineJoinMode.Miter;
-					Name = "\0";
-					Parent = objects[ "box_handler" ]
-				});
-				
-				objects[ "outline" ] = library:create( "Frame" , {
-					Parent = objects[ "box_handler" ];
-					Name = "\0";
-					BackgroundTransparency = 1;
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-				
-				library:create( "UIStroke" , {
-					Parent = objects[ "outline" ];
-					LineJoinMode = Enum.LineJoinMode.Miter
-				});  
-				
-				-- Corner Boxes
-				objects[ "corners" ] = library:create( "Frame" , {
-					Visible = true;
-					BorderColor3 = rgb(0, 0, 0);
-					Parent = library.cache;
-					BackgroundTransparency = 1;
-					Position = dim2(0, -1, 0, 2);
-					Name = "\0";
-					Size = dim2(1, 0, 1, 0);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-
-				local corner_color = safe_color("Box_Color")
-				local corner_defs = {
-					{pos = dim2(0,0,0,-2),    size = dim2(0.4,0,0,3)},
-					{pos = dim2(0,0,0,1),     size = dim2(0,3,0.25,0)},
-					{pos = dim2(1,0,0,-2),    size = dim2(0.4,0,0,3),  ap = vec2(1,0)},
-					{pos = dim2(1,0,0,1),     size = dim2(0,3,0.25,0), ap = vec2(1,0)},
-					{pos = dim2(0,-1,1,-2),   size = dim2(0.4,0,0,3),  ap = vec2(0,1)},
-					{pos = dim2(0,0,1,-4),    size = dim2(0,3,0.25,1), ap = vec2(0,1), rot = 180},
-					{pos = dim2(1,-1,1,-2),   size = dim2(0.4,0,0,3),  ap = vec2(1,1)},
-					{pos = dim2(1,0,1,-4),    size = dim2(0,3,0.25,1), ap = vec2(1,1), rot = 180},
-				}
-				for i, def in ipairs(corner_defs) do
-					local outer = library:create("Frame", {
-						Parent      = objects["corners"];
-						Name        = "line";
-						Position    = def.pos;
-						AnchorPoint = def.ap or vec2(0,0);
-						Rotation    = def.rot or 0;
-						BorderColor3= rgb(0,0,0);
-						Size        = def.size;
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0,0,0);
-					})
-					library:create("Frame", {
-						Parent      = outer;
-						Position    = dim2(0,1,0,1);
-						BorderColor3= rgb(0,0,0);
-						Size        = dim2(1,-2,1,-2);
-						BorderSizePixel = 0;
-						BackgroundColor3 = corner_color;
-					})
-					objects["corner_" .. i] = outer
-				end
-
-				-- Healthbar
-				objects[ "healthbar_holder" ] = library:create( "Frame" , {
-					AnchorPoint = vec2(1, 0);
-					Parent = library.cache;
-					Name = "\0";
-					Position = dim2(0, -5, 0, 0);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(0, 4, 1, 0);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(0, 0, 0)
-				});
-				
-				objects[ "healthbar" ] = library:create( "Frame" , {
-					Parent = objects[ "healthbar_holder" ];
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = rgb(255, 255, 255)
-				});
-
-				-- Distance
-				objects[ "distance" ] = library:create( "TextLabel" , {
-					FontFace = library.font;
-					TextColor3 = safe_color("Distance_Color");
-					BorderColor3 = rgb(0, 0, 0);
-					Text = "127st";
-					Parent = library.cache;
-					TextStrokeTransparency = 0;
-					Name = "\0";
-					Size = dim2(1, 0, 0, 0);
-					BackgroundTransparency = 1;
-					Position = dim2(0, 0, 1, 5);
-					BorderSizePixel = 0;
-					AutomaticSize = Enum.AutomaticSize.Y;
-					TextSize = 12;
-				});                
-
-				-- Weapon
-				objects[ "weapon" ] = library:create( "TextLabel" , {
-					FontFace = library.font;
-					TextColor3 = safe_color("Weapon_Color");
-					BorderColor3 = rgb(0, 0, 0);
-					Text = "[ Weapon ]";
-					Parent = library.cache;
-					TextStrokeTransparency = 0;
-					Name = "\0";
-					Size = dim2(1, 0, 0, 0);
-					BackgroundTransparency = 1;
-					Position = dim2(0, 0, 1, 19);
-					BorderSizePixel = 0;
-					AutomaticSize = Enum.AutomaticSize.Y;
-					TextSize = 12;
-				});
-			end 
-
-			cfg.change_health = function()
-				local health_low  = safe_color("Health_Low")
-				local health_high = safe_color("Health_High")
-				local multiplier  = math.abs(math.sin(tick() * 2))
-				local col         = health_low:Lerp(health_high, multiplier)
-				
-				objects["healthbar"].Size     = UDim2.new(1, -2, multiplier, -2)
-				objects["healthbar"].Position = UDim2.new(0, 1, 1 - multiplier, 1)
-				objects["healthbar"].BackgroundColor3 = col
-			end
-
-			function cfg.refresh_elements()                                
-				objects.holder.Parent = flags["Enabled"] and items.viewportframe or library.cache
-
-				local temp = {
-					["Names"]          = objects["name"]; 
-					["Name_Color"]     = {objects["name"]};
-					["Healthbar"]      = objects[ "healthbar_holder" ];
-					["Distance"]       = objects[ "distance" ];
-					["Weapon"]         = objects[ "weapon" ];
-					["Distance_Color"] = {objects[ "distance" ]};
-					["Weapon_Color"]   = {objects[ "weapon" ]};
-				}
-
-				for flag, object in temp do 
-					if type(object) == "table" then 
-						object[1].TextColor3 = safe_color(flag)
-					else 
-						object.Parent = flags[flag] and objects["holder"] or library.cache
-					end
-				end 
-				
-				local is_corner = flags["Box_Type"] == "Corner"
-				local box_col   = safe_color("Box_Color")
-
-				if flags["Boxes"] then 
-					if is_corner then 
-						objects["corners"].Parent     = objects["holder"]
-						objects["box_handler"].Parent = library.cache
-						objects["box_outline"].Parent = library.cache
-					else 
-						objects["box_handler"].Parent = objects["holder"]
-						objects["box_outline"].Parent = objects["holder"]
-						objects["corners"].Parent     = library.cache
-					end 
-				else
-					objects["corners"].Parent     = library.cache
-					objects["box_handler"].Parent = library.cache
-					objects["box_outline"].Parent = library.cache
-				end 
-
-				objects["box_color"].Color = box_col
-
-				for _, corner in objects["corners"]:GetChildren() do
-					if corner:IsA("Frame") and corner:FindFirstChildOfClass("Frame") then
-						corner:FindFirstChildOfClass("Frame").BackgroundColor3 = box_col
-					end
-				end
-			end
-
-			-- Show holder in viewport by default (always visible)
-			objects["holder"].Parent = items.viewportframe
-
-			task.spawn(function()
-				while true do 
-					task.wait()
-					cfg.change_health()
-				end 
+			local viewportframe = library:create("ViewportFrame",{
+				Parent=self.holder, BackgroundTransparency=1, Size=dim2(1,0,0,220),
+				BorderColor3=rgb(0,0,0), ZIndex=1, Position=dim2(0,0,0,10),
+				BorderSizePixel=0, BackgroundColor3=rgb(255,255,255)})
+			cfg.items.viewportframe = viewportframe
+			local vpcam = library:create("Camera",{FieldOfView=70, CameraType=Enum.CameraType.Track, Parent=ws, Name="\0"})
+			cfg.items.camera = vpcam
+			viewportframe.CurrentCamera = vpcam
+			character.Parent = viewportframe
+			vpcam.CFrame = CFrame.new(0,3,6)*CFrame.Angles(0,math.rad(180),0)
+			vpcam.CameraSubject = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("HumanoidRootPart")
+			library:connection(run.RenderStepped, function()
+				cfg.rotation = cfg.rotation + 0.4
+				local hrp = character:FindFirstChild("HumanoidRootPart")
+				if hrp then hrp.CFrame=CFrame.new(0,0,0)*CFrame.Angles(0,math.rad(cfg.rotation),0) end
 			end)
-
+			local function sc(f) local v=flags[f]; return (v and v.Color) or rgb(255,255,255) end
+			local holder = library:create("Frame",{
+				Parent=viewportframe, Name="\0", BackgroundTransparency=1, Position=dim2(0.5,0,0.5,10),
+				BorderColor3=rgb(0,0,0), Size=dim2(0,135,0,190), BorderSizePixel=0,
+				AnchorPoint=vec2(0.5,0.5), BackgroundColor3=rgb(255,255,255)})
+			cfg.objects["holder"]=holder
+			cfg.objects["box_outline"]=library:create("UIStroke",{Parent=library.cache,LineJoinMode=Enum.LineJoinMode.Miter})
+			cfg.objects["name"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Name_Color"),
+				BorderColor3=rgb(0,0,0),Text=string.format("%s (@%s)",lp.DisplayName,lp.Name),
+				Parent=library.cache,TextStrokeTransparency=0,Name="\0",AnchorPoint=vec2(0,1),
+				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,0,-5),
+				BorderSizePixel=0,AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
+			cfg.objects["box_handler"]=library:create("Frame",{Parent=library.cache,Name="\0",
+				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
+				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
+			cfg.objects["box_color"]=library:create("UIStroke",{Color=sc("Box_Color"),
+				LineJoinMode=Enum.LineJoinMode.Miter,Name="\0",Parent=cfg.objects["box_handler"]})
+			cfg.objects["outline"]=library:create("Frame",{Parent=cfg.objects["box_handler"],Name="\0",
+				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
+				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
+			library:create("UIStroke",{Parent=cfg.objects["outline"],LineJoinMode=Enum.LineJoinMode.Miter})
+			local corners=library:create("Frame",{Visible=true,BorderColor3=rgb(0,0,0),Parent=library.cache,
+				BackgroundTransparency=1,Position=dim2(0,-1,0,2),Name="\0",Size=dim2(1,0,1,0),
+				BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
+			cfg.objects["corners"]=corners
+			local cc=sc("Box_Color")
+			local cdefs={{p=dim2(0,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(0,0),r=0},
+				{p=dim2(0,0,0,1),s=dim2(0,3,0.25,0),a=vec2(0,0),r=0},
+				{p=dim2(1,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(1,0),r=0},
+				{p=dim2(1,0,0,1),s=dim2(0,3,0.25,0),a=vec2(1,0),r=0},
+				{p=dim2(0,-1,1,-2),s=dim2(0.4,0,0,3),a=vec2(0,1),r=0},
+				{p=dim2(0,0,1,-4),s=dim2(0,3,0.25,1),a=vec2(0,1),r=180},
+				{p=dim2(1,-1,1,-2),s=dim2(0.4,0,0,3),a=vec2(1,1),r=0},
+				{p=dim2(1,0,1,-4),s=dim2(0,3,0.25,1),a=vec2(1,1),r=180}}
+			for i=1,#cdefs do
+				local d=cdefs[i]
+				local o=library:create("Frame",{Parent=corners,Name="line",Position=d.p,AnchorPoint=d.a,
+					Rotation=d.r,BorderColor3=rgb(0,0,0),Size=d.s,BorderSizePixel=0,BackgroundColor3=rgb(0,0,0)})
+				library:create("Frame",{Parent=o,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
+					Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=cc})
+			end
+			local hbh=library:create("Frame",{AnchorPoint=vec2(1,0),Parent=library.cache,Name="\0",
+				Position=dim2(0,-5,0,0),BorderColor3=rgb(0,0,0),Size=dim2(0,4,1,0),BorderSizePixel=0,BackgroundColor3=rgb(0,0,0)})
+			cfg.objects["healthbar_holder"]=hbh
+			cfg.objects["healthbar"]=library:create("Frame",{Parent=hbh,Name="\0",Position=dim2(0,1,0,1),
+				BorderColor3=rgb(0,0,0),Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
+			cfg.objects["distance"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Distance_Color"),
+				BorderColor3=rgb(0,0,0),Text="127st",Parent=library.cache,TextStrokeTransparency=0,Name="\0",
+				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,1,5),BorderSizePixel=0,
+				AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
+			cfg.objects["weapon"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Weapon_Color"),
+				BorderColor3=rgb(0,0,0),Text="[ Weapon ]",Parent=library.cache,TextStrokeTransparency=0,Name="\0",
+				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,1,19),BorderSizePixel=0,
+				AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
+			cfg.change_health = function()
+				local mul=math.abs(math.sin(tick()*2))
+				local col=sc("Health_Low"):Lerp(sc("Health_High"),mul)
+				cfg.objects["healthbar"].Size=UDim2.new(1,-2,mul,-2)
+				cfg.objects["healthbar"].Position=UDim2.new(0,1,1-mul,1)
+				cfg.objects["healthbar"].BackgroundColor3=col
+			end
+			function cfg.refresh_elements()
+				cfg.objects["holder"].Parent=flags["Enabled"] and viewportframe or library.cache
+				local m={["Names"]={cfg.objects["name"]},["Name_Color"]={cfg.objects["name"]},
+					["Healthbar"]=cfg.objects["healthbar_holder"],["Distance"]=cfg.objects["distance"],
+					["Weapon"]=cfg.objects["weapon"],["Distance_Color"]={cfg.objects["distance"]},
+					["Weapon_Color"]={cfg.objects["weapon"]}}
+				for f,o in next,m do
+					if type(o)=="table" then o[1].TextColor3=sc(f)
+					else o.Parent=flags[f] and cfg.objects["holder"] or library.cache end
+				end
+				local bc=sc("Box_Color"); cfg.objects["box_color"].Color=bc
+				if flags["Boxes"] then
+					if flags["Box_Type"]=="Corner" then
+						cfg.objects["corners"].Parent=cfg.objects["holder"]
+						cfg.objects["box_handler"].Parent=library.cache
+						cfg.objects["box_outline"].Parent=library.cache
+					else
+						cfg.objects["box_handler"].Parent=cfg.objects["holder"]
+						cfg.objects["box_outline"].Parent=cfg.objects["holder"]
+						cfg.objects["corners"].Parent=library.cache
+					end
+				else
+					cfg.objects["corners"].Parent=library.cache
+					cfg.objects["box_handler"].Parent=library.cache
+					cfg.objects["box_outline"].Parent=library.cache
+				end
+				for _,c in next,corners:GetChildren() do
+					if c:IsA("Frame") then
+						local inner=c:FindFirstChildOfClass("Frame")
+						if inner then inner.BackgroundColor3=bc end
+					end
+				end
+			end
+			task.spawn(function() while true do task.wait(); cfg.change_health() end end)
 			return setmetatable(cfg, library)
 		end
-
 		function library:refresh_notifications()  	
 			for _, notif in next, library.notifications do 
 				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(0, 20, 0, 72 + (_ * 28))}):Play()
@@ -4256,7 +4051,7 @@
 				end
 
 
-				-- ok bro its 30 april2025.. what is this code from october 2024 💀💀
+				-- ok bro its 30 april2025.. what is this code from october 2024 ðŸ’€ðŸ’€
 				hold_button.MouseButton1Click:Connect(function()
 					cfg.set_mode("hold") 
 					cfg.set_visible(false)
