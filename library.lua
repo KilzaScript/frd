@@ -2238,6 +2238,8 @@
 			end)
 
 			return setmetatable(cfg, library)
+		end
+
 		function library:refresh_notifications()  	
 			for _, notif in next, library.notifications do 
 				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(0, 20, 0, 72 + (_ * 28))}):Play()
