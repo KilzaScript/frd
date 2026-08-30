@@ -1705,6 +1705,13 @@
 				local section = column:section({name = "Other"})
 				section:label({name = "UI Bind"})
 				:keybind({callback = window.set_menu_visibility, key = Enum.KeyCode.Insert})
+
+				-- RightShift also toggles the menu
+				library:connection(uis.InputBegan, function(input, game_processed)
+					if not game_processed and input.KeyCode == Enum.KeyCode.RightShift then
+						window.set_menu_visibility(not window.opened)
+					end
+				end)
 				section:toggle({name = "Keybind List", flag = "keybind_list", callback = function(bool)
 					library.keybind_list_frame.Visible = bool
 				end})
@@ -1812,25 +1819,6 @@
 				
 				local column = setmetatable(items, library):column() 
 				window.esp_section = column:section({name = "Main"})
-			--  
-
-			-- playerlist 
-				local holder = library:panel({
-					name = "Playerlist", 
-					anchor_point = vec2(0, 0),
-					size = dim2(0, 529, 0, 445),
-					position = dim2(0, main_window.items.main_holder.AbsolutePosition.X - 531, 0, main_window.items.main_holder.AbsolutePosition.Y),
-					image = "rbxassetid://107070078834415",
-				})  
-				
-				local items = holder.items
-
-				local column = setmetatable(items, library):column() 
-				local section = column:section({name = "Playerlist"})
-				local playerlist = section:playerlist({})
-				section:dropdown({name = "Priority", items = {"Enemy", "Priority", "Neutral", "Friendly"}, default = "Neutral", flag = "PLAYERLIST_DROPDOWN", callback = function(text)
-					library.prioritize(text)
-				end})
 			--  
 
 			return setmetatable(window, library)
@@ -1945,9 +1933,23 @@
 		function library:esp_preview(properties)
 			local cfg = {items = {}, rotation = 0; objects = {};}
 
-			lp.Character.Archivable = true
-			local character = lp.Character:Clone()
-			character.Animate:Destroy()
+			-- Wait for character to exist before cloning
+			local character
+			if lp.Character then
+				lp.Character.Archivable = true
+				character = lp.Character:Clone()
+			else
+				lp.CharacterAdded:Wait()
+				lp.Character.Archivable = true
+				character = lp.Character:Clone()
+			end
+
+			-- Remove scripts so the clone doesn't animate or interfere
+			for _, s in ipairs(character:GetDescendants()) do
+				if s:IsA("Script") or s:IsA("LocalScript") or s:IsA("ModuleScript") then
+					s:Destroy()
+				end
+			end
 
 			local items = cfg.items; do 
 				items.viewportframe = library:create( "ViewportFrame" , {
@@ -1962,25 +1964,35 @@
 				});
 				
 				items.camera = library:create( "Camera" , {
-					FieldOfView = 70.00022888183594;
+					FieldOfView = 70;
 					CameraType = Enum.CameraType.Track;
-					Focus = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1); -- bro wtf is this serializer doing
+					Focus = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
 					CFrame = cfr(0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1);
 					Parent = ws;
 					Name = "\0"
 				}); 
 
-				items.viewportframe.CurrentCamera = items.camera -- sick
+				items.viewportframe.CurrentCamera = items.camera
 				character.Parent = items.viewportframe
 
-				items.camera.CameraSubject = character
+				-- Position camera to frame the character nicely
+				items.camera.CFrame = CFrame.new(0, 2, 5) * CFrame.Angles(0, math.rad(180), 0)
+				items.camera.CameraSubject = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("HumanoidRootPart")
 
 				library:connection(run.RenderStepped, function()
-					task.wait()
-					cfg.rotation += 0.5
-					character:SetPrimaryPartCFrame(cfr(Vector3.new(0, 1, -6)) * angle(0, math.rad(cfg.rotation), 0))
+					cfg.rotation += 0.4
+					local hrp = character:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						hrp.CFrame = CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(cfg.rotation), 0)
+					end
 				end)
 			end 
+
+			-- Safe color defaults — read live from flags if they exist, else use white
+			local function safe_color(flag_name)
+				local f = flags[flag_name]
+				return (f and f.Color) or rgb(255, 255, 255)
+			end
 
 			local objects = cfg.objects; do 
 				objects[ "holder" ] = library:create( "Frame" , {
@@ -2003,7 +2015,7 @@
 				objects[ "name" ] = library:create( "TextLabel" , {
 					FontFace = library.font;
 					Parent = library.cache;
-					TextColor3 = flags["Name_Color"].Color;
+					TextColor3 = safe_color("Name_Color");
 					BorderColor3 = rgb(0, 0, 0);
 					Text = string.format("%s (@%s)", lp.DisplayName, lp.Name);
 					Name = "\0";
@@ -2029,7 +2041,7 @@
 				});
 				
 				objects[ "box_color" ] = library:create( "UIStroke" , {
-					Color = rgb(255, 255, 255);
+					Color = safe_color("Box_Color");
 					LineJoinMode = Enum.LineJoinMode.Miter;
 					Name = "\0";
 					Parent = objects[ "box_handler" ]
@@ -2052,299 +2064,171 @@
 				});  
 				
 				-- Corner Boxes
-					objects[ "corners" ] = library:create( "Frame" , {
-						Visible = true;
-						BorderColor3 = rgb(0, 0, 0);
-						Parent = library.cache;
-						BackgroundTransparency = 1;
-						Position = dim2(0, -1, 0, 2);
-						Name = "\0";
-						Size = dim2(1, 0, 1, 0);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(255, 255, 255)
-					});
+				objects[ "corners" ] = library:create( "Frame" , {
+					Visible = true;
+					BorderColor3 = rgb(0, 0, 0);
+					Parent = library.cache;
+					BackgroundTransparency = 1;
+					Position = dim2(0, -1, 0, 2);
+					Name = "\0";
+					Size = dim2(1, 0, 1, 0);
+					BorderSizePixel = 0;
+					BackgroundColor3 = rgb(255, 255, 255)
+				});
 
-					objects[ "1" ] = library:create( "Frame" , {
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(0, 0, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0.4, 0, 0, 3);
+				local corner_color = safe_color("Box_Color")
+				local corner_defs = {
+					{pos = dim2(0,0,0,-2),    size = dim2(0.4,0,0,3)},
+					{pos = dim2(0,0,0,1),     size = dim2(0,3,0.25,0)},
+					{pos = dim2(1,0,0,-2),    size = dim2(0.4,0,0,3),  ap = vec2(1,0)},
+					{pos = dim2(1,0,0,1),     size = dim2(0,3,0.25,0), ap = vec2(1,0)},
+					{pos = dim2(0,-1,1,-2),   size = dim2(0.4,0,0,3),  ap = vec2(0,1)},
+					{pos = dim2(0,0,1,-4),    size = dim2(0,3,0.25,1), ap = vec2(0,1), rot = 180},
+					{pos = dim2(1,-1,1,-2),   size = dim2(0.4,0,0,3),  ap = vec2(1,1)},
+					{pos = dim2(1,0,1,-4),    size = dim2(0,3,0.25,1), ap = vec2(1,1), rot = 180},
+				}
+				for i, def in ipairs(corner_defs) do
+					local outer = library:create("Frame", {
+						Parent      = objects["corners"];
+						Name        = "line";
+						Position    = def.pos;
+						AnchorPoint = def.ap or vec2(0,0);
+						Rotation    = def.rot or 0;
+						BorderColor3= rgb(0,0,0);
+						Size        = def.size;
 						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "1" ];
-						Position = dim2(0, 1, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, -2);
+						BackgroundColor3 = rgb(0,0,0);
+					})
+					library:create("Frame", {
+						Parent      = outer;
+						Position    = dim2(0,1,0,1);
+						BorderColor3= rgb(0,0,0);
+						Size        = dim2(1,-2,1,-2);
 						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "2" ] = library:create( "Frame" , {
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(0, 0, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0, 3, 0.25, 0);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "2" ];
-						Position = dim2(0, 1, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "3" ] = library:create( "Frame" , {
-						AnchorPoint = vec2(1, 0);
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(1, 0, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0.4, 0, 0, 3);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "3" ];
-						Position = dim2(0, 1, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, -2);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "4" ] = library:create( "Frame" , {
-						AnchorPoint = vec2(1, 0);
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(1, 0, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0, 3, 0.25, 0);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "4" ];
-						Position = dim2(0, 1, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "5" ] = library:create( "Frame" , {
-						AnchorPoint = vec2(0, 1);
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(0, -1, 1, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0.4, 0, 0, 3);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "5" ];
-						Position = dim2(0, 1, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, -2);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "6" ] = library:create( "Frame" , {
-						BorderColor3 = rgb(0, 0, 0);
-						Rotation = 180;
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(0, 0, 1, -4);
-						AnchorPoint = vec2(0, 1);
-						Size = dim2(0, 3, 0.25, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "6" ];
-						Position = dim2(0, 1, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "7" ] = library:create( "Frame" , {
-						AnchorPoint = vec2(1, 1);
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(1, -1, 1, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0.4, 0, 0, 3);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "7" ];
-						Position = dim2(0, 1, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, -2);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-					
-					objects[ "7" ] = library:create( "Frame" , {
-						BorderColor3 = rgb(0, 0, 0);
-						Rotation = 180;
-						Parent = objects[ "corners" ];
-						Name = "line";
-						Position = dim2(1, 0, 1, -4);
-						AnchorPoint = vec2(1, 1);
-						Size = dim2(0, 3, 0.25, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					library:create( "Frame" , {
-						Parent = objects[ "7" ];
-						Position = dim2(0, 1, 0, -2);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, 1);
-						BorderSizePixel = 0;
-						BackgroundColor3 = flags["Box_Color"].Color
-					});
-				-- 
-				
+						BackgroundColor3 = corner_color;
+					})
+					objects["corner_" .. i] = outer
+				end
+
 				-- Healthbar
-					objects[ "healthbar_holder" ] = library:create( "Frame" , {
-						AnchorPoint = vec2(1, 0);
-						Parent = library.cache;
-						Name = "\0";
-						Position = dim2(0, -5, 0, 0);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(0, 4, 1, 0);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(0, 0, 0)
-					});
-					
-					objects[ "healthbar" ] = library:create( "Frame" , {
-						Parent = objects[ "healthbar_holder" ];
-						Name = "\0";
-						Position = dim2(0, 1, 0, 1);
-						BorderColor3 = rgb(0, 0, 0);
-						Size = dim2(1, -2, 1, -2);
-						BorderSizePixel = 0;
-						BackgroundColor3 = rgb(255, 255, 255)
-					});
-				-- 
+				objects[ "healthbar_holder" ] = library:create( "Frame" , {
+					AnchorPoint = vec2(1, 0);
+					Parent = library.cache;
+					Name = "\0";
+					Position = dim2(0, -5, 0, 0);
+					BorderColor3 = rgb(0, 0, 0);
+					Size = dim2(0, 4, 1, 0);
+					BorderSizePixel = 0;
+					BackgroundColor3 = rgb(0, 0, 0)
+				});
+				
+				objects[ "healthbar" ] = library:create( "Frame" , {
+					Parent = objects[ "healthbar_holder" ];
+					Name = "\0";
+					Position = dim2(0, 1, 0, 1);
+					BorderColor3 = rgb(0, 0, 0);
+					Size = dim2(1, -2, 1, -2);
+					BorderSizePixel = 0;
+					BackgroundColor3 = rgb(255, 255, 255)
+				});
 
-				-- Distance esp
-					objects[ "distance" ] = library:create( "TextLabel" , {
-						FontFace = library.font;
-						TextColor3 = flags["Distance_Color"].Color;
-						BorderColor3 = rgb(0, 0, 0);
-						Text = "127st";
-						Parent = library.cache;
-						TextStrokeTransparency = 0;
-						Name = "\0";
-						Size = dim2(1, 0, 0, 0);
-						BackgroundTransparency = 1;
-						Position = dim2(0, 0, 1, 5);
-						BorderSizePixel = 0;
-						AutomaticSize = Enum.AutomaticSize.Y;
-						TextSize = 12;
-					});                
-				-- 
+				-- Distance
+				objects[ "distance" ] = library:create( "TextLabel" , {
+					FontFace = library.font;
+					TextColor3 = safe_color("Distance_Color");
+					BorderColor3 = rgb(0, 0, 0);
+					Text = "127st";
+					Parent = library.cache;
+					TextStrokeTransparency = 0;
+					Name = "\0";
+					Size = dim2(1, 0, 0, 0);
+					BackgroundTransparency = 1;
+					Position = dim2(0, 0, 1, 5);
+					BorderSizePixel = 0;
+					AutomaticSize = Enum.AutomaticSize.Y;
+					TextSize = 12;
+				});                
 
-				-- Weapon esp
-					objects[ "weapon" ] = library:create( "TextLabel" , {
-						FontFace = library.font;
-						TextColor3 = flags["Weapon_Color"].Color;
-						BorderColor3 = rgb(0, 0, 0);
-						Text = "[ Weapon ]";
-						Parent = library.cache;
-						TextStrokeTransparency = 0;
-						Name = "\0";
-						Size = dim2(1, 0, 0, 0);
-						BackgroundTransparency = 1;
-						Position = dim2(0, 0, 1, 19);
-						BorderSizePixel = 0;
-						AutomaticSize = Enum.AutomaticSize.Y;
-						TextSize = 12;
-					});
-				--  
+				-- Weapon
+				objects[ "weapon" ] = library:create( "TextLabel" , {
+					FontFace = library.font;
+					TextColor3 = safe_color("Weapon_Color");
+					BorderColor3 = rgb(0, 0, 0);
+					Text = "[ Weapon ]";
+					Parent = library.cache;
+					TextStrokeTransparency = 0;
+					Name = "\0";
+					Size = dim2(1, 0, 0, 0);
+					BackgroundTransparency = 1;
+					Position = dim2(0, 0, 1, 19);
+					BorderSizePixel = 0;
+					AutomaticSize = Enum.AutomaticSize.Y;
+					TextSize = 12;
+				});
 			end 
 
 			cfg.change_health = function()
-				if flags[ "healthbar_holder" ] and flags[ "healthbar_holder" ].Parent ~= objects[ "holder" ] then 
-					return 
-				end
-
-				local humanoid = character.Humanoid
+				local health_low  = safe_color("Health_Low")
+				local health_high = safe_color("Health_High")
+				local multiplier  = math.abs(math.sin(tick() * 2))
+				local col         = health_low:Lerp(health_high, multiplier)
 				
-				local multiplier = humanoid.MaxHealth * math.abs(math.sin(tick() * 2)) / humanoid.MaxHealth
-				local color = flags[ "Health_Low" ].Color:Lerp( flags["Health_High"].Color, multiplier)
-				
-				objects[ "healthbar" ].Size = UDim2.new(1, -2, multiplier, -2)
-				objects[ "healthbar" ].Position = UDim2.new(0, 1, 1 - multiplier, 1)
-				objects[ "healthbar" ].BackgroundColor3 = color
-			end -- wtf why diff func defining
+				objects["healthbar"].Size     = UDim2.new(1, -2, multiplier, -2)
+				objects["healthbar"].Position = UDim2.new(0, 1, 1 - multiplier, 1)
+				objects["healthbar"].BackgroundColor3 = col
+			end
 
-			function cfg.refresh_elements( )                                
+			function cfg.refresh_elements()                                
 				objects.holder.Parent = flags["Enabled"] and items.viewportframe or library.cache
 
 				local temp = {
-					["Names"] = objects["name"]; 
-					["Name_Color"] = {objects["name"]};
-					["Healthbar"] = objects[ "healthbar_holder" ];
-					["Distance"] = objects[ "distance" ];
-					["Weapon"] = objects[ "weapon" ];
+					["Names"]          = objects["name"]; 
+					["Name_Color"]     = {objects["name"]};
+					["Healthbar"]      = objects[ "healthbar_holder" ];
+					["Distance"]       = objects[ "distance" ];
+					["Weapon"]         = objects[ "weapon" ];
 					["Distance_Color"] = {objects[ "distance" ]};
-					["Weapon_Color"] = {objects[ "weapon" ]};
+					["Weapon_Color"]   = {objects[ "weapon" ]};
 				}
 
-				for flag,object in temp do 
+				for flag, object in temp do 
 					if type(object) == "table" then 
-						object[1].TextColor3 = flags[flag].Color
+						object[1].TextColor3 = safe_color(flag)
 					else 
-						object.Parent = flags[flag] and objects[ "holder" ] or library.cache
+						object.Parent = flags[flag] and objects["holder"] or library.cache
 					end
 				end 
 				
-				local is_corner = flags[ "Box_Type" ] == "Corner"
+				local is_corner = flags["Box_Type"] == "Corner"
+				local box_col   = safe_color("Box_Color")
 
 				if flags["Boxes"] then 
 					if is_corner then 
-						objects[ "corners" ].Parent = objects["holder"]
-						objects[ "box_handler" ].Parent = library.cache
-						objects[ "box_outline" ].Parent = library.cache
+						objects["corners"].Parent     = objects["holder"]
+						objects["box_handler"].Parent = library.cache
+						objects["box_outline"].Parent = library.cache
 					else 
-						objects[ "box_handler" ].Parent = objects[ "holder" ]
-						objects[ "box_outline" ].Parent = objects[ "holder" ]
-						objects[ "corners" ].Parent = library.cache
+						objects["box_handler"].Parent = objects["holder"]
+						objects["box_outline"].Parent = objects["holder"]
+						objects["corners"].Parent     = library.cache
 					end 
 				else
-					objects[ "corners" ].Parent =  library.cache
-					objects[ "box_handler" ].Parent = library.cache
-					objects[ "box_outline" ].Parent = library.cache
+					objects["corners"].Parent     = library.cache
+					objects["box_handler"].Parent = library.cache
+					objects["box_outline"].Parent = library.cache
 				end 
 
-				objects[ "box_color" ].Color = flags["Box_Color"].Color 
+				objects["box_color"].Color = box_col
 
-				for _, corner in objects[ "corners" ]:GetChildren() do
-					corner.Frame.BackgroundColor3 = flags["Box_Color"].Color
+				for _, corner in objects["corners"]:GetChildren() do
+					if corner:IsA("Frame") and corner:FindFirstChildOfClass("Frame") then
+						corner:FindFirstChildOfClass("Frame").BackgroundColor3 = box_col
+					end
 				end
 			end
+
+			-- Show holder in viewport by default (always visible)
+			objects["holder"].Parent = items.viewportframe
 
 			task.spawn(function()
 				while true do 
@@ -2354,8 +2238,6 @@
 			end)
 
 			return setmetatable(cfg, library)
-		end
-
 		function library:refresh_notifications()  	
 			for _, notif in next, library.notifications do 
 				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(0, 20, 0, 72 + (_ * 28))}):Play()
