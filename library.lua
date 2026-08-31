@@ -1914,56 +1914,62 @@
 
 		end 
 
-		function library:esp_preview(properties)
-			local cfg = {items={}, rotation=0, objects={}}
-			if not lp.Character then lp.CharacterAdded:Wait() end
-			lp.Character.Archivable = true
-			local character = lp.Character:Clone()
-			for _,s in ipairs(character:GetDescendants()) do
-				if s:IsA("Script") or s:IsA("LocalScript") or s:IsA("ModuleScript") then s:Destroy() end
-			end
+		function library:esp_preview(options)
+			options = options or {}
+			local cfg = {items={}, rotation=0, objects={}, lines={}, last_build=0}
+
+			-- Providers supplied by the main script so the preview always
+			-- mirrors the real ESP settings instead of dead flags.
+			local get_settings = options.settings or function() return {} end
+			local get_color    = options.color or function() return rgb(255, 255, 255) end
+
+			local cache = library.cache
+
+			-- viewport (a live character from the current session renders here)
 			local viewportframe = library:create("ViewportFrame",{
 				Parent=self.holder, BackgroundTransparency=1, Size=dim2(1,0,0,220),
 				BorderColor3=rgb(0,0,0), ZIndex=1, Position=dim2(0,0,0,10),
-				BorderSizePixel=0, BackgroundColor3=rgb(255,255,255)})
+				BorderSizePixel=0, BackgroundColor3=rgb(18,18,24),
+				Ambient=Color3.fromRGB(200,200,200), LightColor=Color3.fromRGB(255,255,255),
+				LightDirection=Vector3.new(-1,-2,-2)})
 			cfg.items.viewportframe = viewportframe
-			local vpcam = library:create("Camera",{FieldOfView=70, CameraType=Enum.CameraType.Track, Parent=ws, Name="\0"})
+
+			local vpcam = library:create("Camera",{FieldOfView=45, CameraType=Enum.CameraType.Scriptable,
+				Parent=viewportframe, Name="\0"})
 			cfg.items.camera = vpcam
 			viewportframe.CurrentCamera = vpcam
-			character.Parent = viewportframe
-			vpcam.CFrame = CFrame.new(0,3,6)*CFrame.Angles(0,math.rad(180),0)
-			vpcam.CameraSubject = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("HumanoidRootPart")
-			library:connection(run.RenderStepped, function()
-				cfg.rotation = cfg.rotation + 0.4
-				local hrp = character:FindFirstChild("HumanoidRootPart")
-				if hrp then hrp.CFrame=CFrame.new(0,0,0)*CFrame.Angles(0,math.rad(cfg.rotation),0) end
-			end)
-			local function sc(f) local v=flags[f]; return (v and v.Color) or rgb(255,255,255) end
+			vpcam.CFrame = CFrame.new(0, 1.6, 6.4) * CFrame.Angles(math.rad(-8), 0, 0)
+
+			-- overlay holder (moved into the viewport when ESP is on)
 			local holder = library:create("Frame",{
-				Parent=viewportframe, Name="\0", BackgroundTransparency=1, Position=dim2(0.5,0,0.5,10),
-				BorderColor3=rgb(0,0,0), Size=dim2(0,135,0,190), BorderSizePixel=0,
+				Parent=cache, Name="\0", BackgroundTransparency=1, Position=dim2(0.5,0,0.5,0),
+				BorderColor3=rgb(0,0,0), Size=dim2(0,140,0,185), BorderSizePixel=0,
 				AnchorPoint=vec2(0.5,0.5), BackgroundColor3=rgb(255,255,255)})
 			cfg.objects["holder"]=holder
-			cfg.objects["box_outline"]=library:create("UIStroke",{Parent=library.cache,LineJoinMode=Enum.LineJoinMode.Miter})
-			cfg.objects["name"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Name_Color"),
-				BorderColor3=rgb(0,0,0),Text=string.format("%s (@%s)",lp.DisplayName,lp.Name),
-				Parent=library.cache,TextStrokeTransparency=0,Name="\0",AnchorPoint=vec2(0,1),
-				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,0,-5),
+
+			-- name tag
+			cfg.objects["name"]=library:create("TextLabel",{FontFace=library.font,TextColor3=rgb(220,50,75),
+				BorderColor3=rgb(0,0,0),Text="Preview",Parent=cache,TextStrokeTransparency=0,Name="\0",
+				AnchorPoint=vec2(0,1),Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,0,-5),
 				BorderSizePixel=0,AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
-			cfg.objects["box_handler"]=library:create("Frame",{Parent=library.cache,Name="\0",
+
+			-- full box
+			cfg.objects["box_handler"]=library:create("Frame",{Parent=cache,Name="\0",
 				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
 				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
-			cfg.objects["box_color"]=library:create("UIStroke",{Color=sc("Box_Color"),
+			cfg.objects["box_color"]=library:create("UIStroke",{Color=rgb(220,50,75),
 				LineJoinMode=Enum.LineJoinMode.Miter,Name="\0",Parent=cfg.objects["box_handler"]})
 			cfg.objects["outline"]=library:create("Frame",{Parent=cfg.objects["box_handler"],Name="\0",
 				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
 				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
 			library:create("UIStroke",{Parent=cfg.objects["outline"],LineJoinMode=Enum.LineJoinMode.Miter})
-			local corners=library:create("Frame",{Visible=true,BorderColor3=rgb(0,0,0),Parent=library.cache,
+
+			-- corner box
+			local corners=library:create("Frame",{Visible=true,BorderColor3=rgb(0,0,0),Parent=cache,
 				BackgroundTransparency=1,Position=dim2(0,-1,0,2),Name="\0",Size=dim2(1,0,1,0),
 				BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
 			cfg.objects["corners"]=corners
-			local cc=sc("Box_Color")
+			local cc=rgb(220,50,75)
 			local cdefs={{p=dim2(0,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(0,0),r=0},
 				{p=dim2(0,0,0,1),s=dim2(0,3,0.25,0),a=vec2(0,0),r=0},
 				{p=dim2(1,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(1,0),r=0},
@@ -1979,60 +1985,219 @@
 				library:create("Frame",{Parent=o,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
 					Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=cc})
 			end
-			local hbh=library:create("Frame",{AnchorPoint=vec2(1,0),Parent=library.cache,Name="\0",
+			-- health bar
+			local hbh=library:create("Frame",{AnchorPoint=vec2(1,0),Parent=cache,Name="\0",
 				Position=dim2(0,-5,0,0),BorderColor3=rgb(0,0,0),Size=dim2(0,4,1,0),BorderSizePixel=0,BackgroundColor3=rgb(0,0,0)})
 			cfg.objects["healthbar_holder"]=hbh
 			cfg.objects["healthbar"]=library:create("Frame",{Parent=hbh,Name="\0",Position=dim2(0,1,0,1),
-				BorderColor3=rgb(0,0,0),Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
-			cfg.objects["distance"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Distance_Color"),
-				BorderColor3=rgb(0,0,0),Text="127st",Parent=library.cache,TextStrokeTransparency=0,Name="\0",
+				BorderColor3=rgb(0,0,0),Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(0,255,0)})
+
+			-- distance
+			cfg.objects["distance"]=library:create("TextLabel",{FontFace=library.font,TextColor3=rgb(220,50,75),
+				BorderColor3=rgb(0,0,0),Text="0m",Parent=cache,TextStrokeTransparency=0,Name="\0",
 				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,1,5),BorderSizePixel=0,
 				AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
-			cfg.objects["weapon"]=library:create("TextLabel",{FontFace=library.font,TextColor3=sc("Weapon_Color"),
-				BorderColor3=rgb(0,0,0),Text="[ Weapon ]",Parent=library.cache,TextStrokeTransparency=0,Name="\0",
-				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,1,19),BorderSizePixel=0,
-				AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
-			cfg.change_health = function()
-				local mul=math.abs(math.sin(tick()*2))
-				local col=sc("Health_Low"):Lerp(sc("Health_High"),mul)
-				cfg.objects["healthbar"].Size=UDim2.new(1,-2,mul,-2)
-				cfg.objects["healthbar"].Position=UDim2.new(0,1,1-mul,1)
-				cfg.objects["healthbar"].BackgroundColor3=col
-			end
-			function cfg.refresh_elements()
-				cfg.objects["holder"].Parent=flags["Enabled"] and viewportframe or library.cache
-				local m={["Names"]={cfg.objects["name"]},["Name_Color"]={cfg.objects["name"]},
-					["Healthbar"]=cfg.objects["healthbar_holder"],["Distance"]=cfg.objects["distance"],
-					["Weapon"]=cfg.objects["weapon"],["Distance_Color"]={cfg.objects["distance"]},
-					["Weapon_Color"]={cfg.objects["weapon"]}}
-				for f,o in next,m do
-					if type(o)=="table" then o[1].TextColor3=sc(f)
-					else o.Parent=flags[f] and cfg.objects["holder"] or library.cache end
+
+			-- pooled 2D lines for the tracer / skeleton previews
+			local lines = cfg.lines
+			local function get_line(i)
+				if not lines[i] then
+					lines[i] = library:create("Frame",{Parent=cache,Name="\0",BackgroundTransparency=0.15,
+						BorderSizePixel=0,BackgroundColor3=rgb(220,50,75),AnchorPoint=vec2(0.5,0.5),ZIndex=5})
 				end
-				local bc=sc("Box_Color"); cfg.objects["box_color"].Color=bc
-				if flags["Boxes"] then
-					if flags["Box_Type"]=="Corner" then
-						cfg.objects["corners"].Parent=cfg.objects["holder"]
-						cfg.objects["box_handler"].Parent=library.cache
-						cfg.objects["box_outline"].Parent=library.cache
+				return lines[i]
+			end
+			-- loads a REAL character that exists in the current game/session
+			local model, source, src_char
+			local function build()
+				if model then model:Destroy() model = nil end
+				source, src_char = nil, nil
+
+				-- prefer another player's character, fall back to our own
+				local chosen
+				for _, pl in ipairs(players:GetPlayers()) do
+					local ch = pl.Character
+					if pl ~= lp and ch and ch.Parent and ch:FindFirstChild("HumanoidRootPart") then
+						chosen = pl
+						break
+					end
+				end
+				if not chosen then
+					local ch = lp.Character
+					if ch and ch.Parent and ch:FindFirstChild("HumanoidRootPart") then chosen = lp end
+				end
+				if not chosen or not chosen.Character then return end
+
+				local ch = chosen.Character
+				src_char = ch
+				source = chosen
+				ch.Archivable = true
+
+				local ok, clone = pcall(function() return ch:Clone() end)
+				if not ok or not clone then return end
+
+				for _, s in ipairs(clone:GetDescendants()) do
+					if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then s:Destroy() end
+				end
+
+				local hl = Instance.new("Highlight")
+				hl.FillTransparency = 0.5
+				hl.OutlineTransparency = 0
+				hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				hl.Parent = clone
+				cfg.highlight = hl
+
+				local hrp = clone:FindFirstChild("HumanoidRootPart")
+				if hrp then hrp.Anchored = true end
+
+				clone.Parent = viewportframe
+				clone:PivotTo(CFrame.new())
+				model = clone
+			end
+
+			local R15_BONES = {
+				{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+				{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+				{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+				{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+				{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}}
+			local R6_BONES = {
+				{"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}
+			function cfg.refresh_elements()
+				build()
+			end
+
+			-- live update loop: mirrors settings + real health/distance, spins the model
+			library:connection(run.RenderStepped, function(dt)
+				cfg.rotation = (cfg.rotation + dt * 45) % 360
+
+				-- keep the model synced with the live session
+				if source and (not source.Parent or source.Character ~= src_char) then
+					build()
+				elseif not model and tick() - cfg.last_build > 2 then
+					build()
+				end
+
+				if model then
+					model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(cfg.rotation), 0))
+				end
+
+				local S = get_settings() or {}
+				local col = get_color() or rgb(255, 255, 255)
+				local enabled = S.enabled and true or false
+
+				holder.Parent = enabled and viewportframe or cache
+
+				-- chams preview
+				if cfg.highlight then
+					cfg.highlight.Enabled = enabled and (S.chams and true or false)
+					cfg.highlight.FillColor = col
+					cfg.highlight.OutlineColor = col
+				end
+
+				-- name
+				local name_obj = cfg.objects["name"]
+				if enabled and S.names then
+					name_obj.Parent = holder
+					name_obj.TextColor3 = col
+					name_obj.Text = source and string.format("%s (@%s)", source.DisplayName, source.Name) or "Preview"
+				else
+					name_obj.Parent = cache
+				end
+
+				-- health bar (live values from the real character)
+				local hum = source and source.Character and source.Character:FindFirstChildOfClass("Humanoid")
+				local pct = hum and math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1) or 1
+				local hbh_obj = cfg.objects["healthbar_holder"]
+				if enabled and S.health then
+					hbh_obj.Parent = holder
+					cfg.objects["healthbar"].Size = UDim2.new(1, -2, pct, -2)
+					cfg.objects["healthbar"].Position = UDim2.new(0, 1, 1 - pct, 1)
+					cfg.objects["healthbar"].BackgroundColor3 = rgb(255, 0, 0):Lerp(rgb(0, 255, 0), pct)
+				else
+					hbh_obj.Parent = cache
+				end
+
+				-- distance (live)
+				local dist_obj = cfg.objects["distance"]
+				if enabled and S.distance then
+					local dist = 0
+					local myhrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+					local srchrp = source and source.Character and source.Character:FindFirstChild("HumanoidRootPart")
+					if myhrp and srchrp then dist = (myhrp.Position - srchrp.Position).Magnitude end
+					dist_obj.Text = string.format("%dm", math.floor(dist + 0.5))
+					dist_obj.TextColor3 = col
+					dist_obj.Parent = holder
+				else
+					dist_obj.Parent = cache
+				end
+
+				-- box
+				cfg.objects["box_color"].Color = col
+				if enabled and S.boxes then
+					if S.box_style == "Corners" then
+						corners.Parent = holder
+						cfg.objects["box_handler"].Parent = cache
 					else
-						cfg.objects["box_handler"].Parent=cfg.objects["holder"]
-						cfg.objects["box_outline"].Parent=cfg.objects["holder"]
-						cfg.objects["corners"].Parent=library.cache
+						cfg.objects["box_handler"].Parent = holder
+						corners.Parent = cache
+					end
+					for _, c in ipairs(corners:GetChildren()) do
+						local inner = c:IsA("Frame") and c:FindFirstChildOfClass("Frame")
+						if inner then inner.BackgroundColor3 = col end
 					end
 				else
-					cfg.objects["corners"].Parent=library.cache
-					cfg.objects["box_handler"].Parent=library.cache
-					cfg.objects["box_outline"].Parent=library.cache
+					corners.Parent = cache
+					cfg.objects["box_handler"].Parent = cache
 				end
-				for _,c in next,corners:GetChildren() do
-					if c:IsA("Frame") then
-						local inner=c:FindFirstChildOfClass("Frame")
-						if inner then inner.BackgroundColor3=bc end
+
+				-- pooled lines: tracer + skeleton previews
+				local line_i = 0
+				if enabled and model and (S.tracers or S.skeleton) then
+					local vp_pos = viewportframe.AbsolutePosition
+					local vp_size = viewportframe.AbsoluteSize
+
+					if S.tracers then
+						local h_pos = holder.AbsolutePosition
+						local h_size = holder.AbsoluteSize
+						local a = vec2(vp_size.X / 2, vp_size.Y)
+						local b = vec2(h_pos.X - vp_pos.X + h_size.X / 2, h_pos.Y - vp_pos.Y + h_size.Y)
+						line_i = line_i + 1
+						local l = get_line(line_i)
+						l.Parent = viewportframe
+						l.BackgroundColor3 = col
+						l.Position = dim_offset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
+						l.Size = dim2(0, math.max((b - a).Magnitude, 1), 0, 1)
+						l.Rotation = math.deg(math.atan2(b.Y - a.Y, b.X - a.X))
+					end
+
+					if S.skeleton then
+						local bones = model:FindFirstChild("UpperTorso") and R15_BONES or R6_BONES
+						for _, bone in ipairs(bones) do
+							local p1 = model:FindFirstChild(bone[1])
+							local p2 = model:FindFirstChild(bone[2])
+							if p1 and p2 and p1:IsA("BasePart") and p2:IsA("BasePart") then
+								local s1 = vpcam:WorldToViewportPoint(p1.Position)
+								local s2 = vpcam:WorldToViewportPoint(p2.Position)
+								if s1.Z > 0 and s2.Z > 0 then
+									line_i = line_i + 1
+									local l = get_line(line_i)
+									local a = vec2(s1.X, s1.Y)
+									local b = vec2(s2.X, s2.Y)
+									l.Parent = viewportframe
+									l.BackgroundColor3 = col
+									l.Position = dim_offset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
+									l.Size = dim2(0, math.max((b - a).Magnitude, 1), 0, 1)
+									l.Rotation = math.deg(math.atan2(b.Y - a.Y, b.X - a.X))
+								end
+							end
+						end
 					end
 				end
-			end
-			task.spawn(function() while true do task.wait(); cfg.change_health() end end)
+				for i = line_i + 1, #lines do
+					lines[i].Parent = cache
+				end
+			end)
 			return setmetatable(cfg, library)
 		end
 		function library:refresh_notifications()  	
