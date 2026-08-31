@@ -527,20 +527,30 @@
 		end
 
 		function library:create(instance, options)
-			local ins = Instance.new(instance) 
-			
-			for prop, value in next, options do 
+			local ins = Instance.new(instance)
+
+			for prop, value in next, options do
 				ins[prop] = value
 			end
-			
-			if instance == "TextLabel" or instance == "TextButton" or instance == "TextBox" then 	
+
+			-- smooth look: rounded corners on every frame/button element
+			pcall(function()
+				if ins:IsA("Frame") or ins:IsA("TextButton") or ins:IsA("ImageButton")
+					or ins:IsA("TextBox") or ins:IsA("ScrollingFrame") or ins:IsA("ImageLabel") then
+					local corner = Instance.new("UICorner")
+					corner.CornerRadius = UDim.new(0, 4)
+					corner.Parent = ins
+				end
+			end)
+
+			if instance == "TextLabel" or instance == "TextButton" or instance == "TextBox" then
 				library:apply_theme(ins, "text", "TextColor3")
 				library:apply_stroke(ins)
-			elseif instance == "ScreenGui" then 
+			elseif instance == "ScreenGui" then
 				insert(library.guis, ins)
 			end
-			
-			return ins 
+
+			return ins
 		end
 	-- 
 
@@ -1521,11 +1531,28 @@
 
 			-- main window
 				local main_window = library:panel({
-					name = properties and properties.name or "Atlanta | ", 
+					name = properties and properties.name or "Atlanta | ",
 					size = dim2(0, 604, 0, 628),
 					position = dim2(0, (camera.ViewportSize.X / 2) - 302 - 96, 0, (camera.ViewportSize.Y / 2) - 421 - 12),
 					image = "rbxassetid://98823308062942",
 				})
+
+				-- logo replaces the window title text when an icon is provided
+				if properties and properties.icon then
+					pcall(function()
+						local title_text = main_window.items.text
+						if title_text then title_text.Visible = false end
+						library:create("ImageLabel", {
+							Parent = main_window.items.window_holder,
+							Name = "",
+							Image = "rbxassetid://" .. tostring(properties.icon),
+							BackgroundTransparency = 1,
+							BorderSizePixel = 0,
+							Size = dim2(0, 110, 0, 14),
+							Position = dim2(0, 2, 0, 3),
+						})
+					end)
+				end
 
 				local items = main_window.items
 
