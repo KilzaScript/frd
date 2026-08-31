@@ -1934,16 +1934,16 @@
 				LightDirection=Vector3.new(-1,-2,-2)})
 			cfg.items.viewportframe = viewportframe
 
-			local vpcam = library:create("Camera",{FieldOfView=45, CameraType=Enum.CameraType.Scriptable,
+			local vpcam = library:create("Camera",{FieldOfView=40, CameraType=Enum.CameraType.Scriptable,
 				Parent=viewportframe, Name="\0"})
 			cfg.items.camera = vpcam
 			viewportframe.CurrentCamera = vpcam
-			vpcam.CFrame = CFrame.new(0, 1.6, 6.4) * CFrame.Angles(math.rad(-8), 0, 0)
+			vpcam.CFrame = CFrame.new(0, 2.4, 10) * CFrame.Angles(math.rad(-12), 0, 0)
 
 			-- overlay holder (moved into the viewport when ESP is on)
 			local holder = library:create("Frame",{
 				Parent=cache, Name="\0", BackgroundTransparency=1, Position=dim2(0.5,0,0.5,0),
-				BorderColor3=rgb(0,0,0), Size=dim2(0,140,0,185), BorderSizePixel=0,
+				BorderColor3=rgb(0,0,0), Size=dim2(0,150,0,240), BorderSizePixel=0,
 				AnchorPoint=vec2(0.5,0.5), BackgroundColor3=rgb(255,255,255)})
 			cfg.objects["holder"]=holder
 
@@ -2007,7 +2007,10 @@
 				end
 				return lines[i]
 			end
-			-- loads a REAL character that exists in the current game/session
+			-- loads a REAL character that exists in the current game/session.
+			-- Two-stage loader: whole Model:Clone first, then a part-by-part
+			-- rebuild that works even when a game locks / patches cloning
+			-- (Arsenal, Rivals, etc).
 			local model, source, src_char
 			local function build()
 				if model then model:Destroy() model = nil end
@@ -2017,27 +2020,78 @@
 				local chosen
 				for _, pl in ipairs(players:GetPlayers()) do
 					local ch = pl.Character
-					if pl ~= lp and ch and ch.Parent and ch:FindFirstChild("HumanoidRootPart") then
+					if pl ~= lp and ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then
 						chosen = pl
 						break
 					end
 				end
 				if not chosen then
 					local ch = lp.Character
-					if ch and ch.Parent and ch:FindFirstChild("HumanoidRootPart") then chosen = lp end
+					if ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then chosen = lp end
 				end
 				if not chosen or not chosen.Character then return end
 
 				local ch = chosen.Character
 				src_char = ch
 				source = chosen
-				ch.Archivable = true
+				cfg.last_build = tick()
 
-				local ok, clone = pcall(function() return ch:Clone() end)
-				if not ok or not clone then return end
+				local clone
 
+				-- stage 1: whole-model clone
+				pcall(function()
+					ch.Archivable = true
+					clone = ch:Clone()
+				end)
+
+				-- stage 2: part-by-part rebuild
+				if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
+					if clone then clone:Destroy() end
+					clone = Instance.new("Model")
+					local root = ch:FindFirstChild("HumanoidRootPart")
+						or ch.PrimaryPart
+						or ch:FindFirstChildWhichIsA("BasePart")
+					local pivot = root and root.CFrame or CFrame.new()
+					for _, d in ipairs(ch:GetDescendants()) do
+						if d:IsA("BasePart") and d.Transparency < 1 and d.Name ~= "HumanoidRootPart" then
+							pcall(function()
+								d.Archivable = true
+								local c = d:Clone()
+								c.Anchored = true
+								c.CanCollide = false
+								c.CanTouch = false
+								c.CanQuery = false
+								c.CFrame = pivot:ToObjectSpace(d.CFrame)
+								c.Parent = clone
+							end)
+						end
+					end
+					-- invisible anchor part so PivotTo has a stable pivot
+					pcall(function()
+						local anchor = Instance.new("Part")
+						anchor.Name = "HumanoidRootPart"
+						anchor.Transparency = 1
+						anchor.Anchored = true
+						anchor.CanCollide = false
+						anchor.CanTouch = false
+						anchor.CanQuery = false
+						anchor.Size = Vector3.new(2, 2, 1)
+						anchor.CFrame = CFrame.new()
+						anchor.Parent = clone
+						clone.PrimaryPart = anchor
+					end)
+				end
+
+				if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
+					if clone then clone:Destroy() end
+					return
+				end
+
+				-- clean scripts / leftover highlights
 				for _, s in ipairs(clone:GetDescendants()) do
-					if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then s:Destroy() end
+					if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then
+						s:Destroy()
+					end
 				end
 
 				local hl = Instance.new("Highlight")
@@ -2047,11 +2101,18 @@
 				hl.Parent = clone
 				cfg.highlight = hl
 
-				local hrp = clone:FindFirstChild("HumanoidRootPart")
-				if hrp then hrp.Anchored = true end
+				-- anchor everything so the display rig is perfectly stable
+				for _, d in ipairs(clone:GetDescendants()) do
+					if d:IsA("BasePart") then
+						pcall(function()
+							d.Anchored = true
+							d.CanCollide = false
+						end)
+					end
+				end
 
 				clone.Parent = viewportframe
-				clone:PivotTo(CFrame.new())
+				pcall(function() clone:PivotTo(CFrame.new()) end)
 				model = clone
 			end
 
@@ -2071,9 +2132,15 @@
 			library:connection(run.RenderStepped, function(dt)
 				cfg.rotation = (cfg.rotation + dt * 45) % 360
 
-				-- keep the model synced with the live session
-				if source and (not source.Parent or source.Character ~= src_char) then
-					build()
+				-- keep the model synced with the live session (debounced):
+				-- rebuild when the source leaves, or respawns into a NEW
+				-- character. If the character is temporarily nil (death /
+				-- loading) we keep showing the last model instead of
+				-- spamming clone attempts every frame.
+				if source and (not source.Parent or (source.Character and source.Character ~= src_char)) then
+					if tick() - cfg.last_build > 1.5 then
+						build()
+					end
 				elseif not model and tick() - cfg.last_build > 2 then
 					build()
 				end
