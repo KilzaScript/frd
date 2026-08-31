@@ -533,13 +533,17 @@
 				ins[prop] = value
 			end
 
-			-- smooth look: rounded corners on every frame/button element
+			-- smooth look: rounded corners on real surfaces only — thin 1-3px
+			-- accent/border strips are skipped so no dark gaps show through
 			pcall(function()
 				if ins:IsA("Frame") or ins:IsA("TextButton") or ins:IsA("ImageButton")
 					or ins:IsA("TextBox") or ins:IsA("ScrollingFrame") or ins:IsA("ImageLabel") then
-					local corner = Instance.new("UICorner")
-					corner.CornerRadius = UDim.new(0, 4)
-					corner.Parent = ins
+					local h = (typeof(options.Size) == "UDim2") and options.Size.Y.Offset or 99
+					if h > 3 then
+						local corner = Instance.new("UICorner")
+						corner.CornerRadius = UDim.new(0, h <= 18 and 4 or 7)
+						corner.Parent = ins
+					end
 				end
 			end)
 
@@ -1652,6 +1656,7 @@
 					position = dim2(0, main_window.items.main_holder.AbsolutePosition.X + main_window.items.main_holder.AbsoluteSize.X + 2, 0, main_window.items.main_holder.AbsolutePosition.Y),
 					image = "rbxassetid://115194686863276",
 				})
+				style.items.sgui.Enabled = false -- open only when clicked in the dock
 
 				local watermark = library:watermark({default = os.date('Atlanta |  - %b %d %Y - %H:%M:%S')})  
 
@@ -1762,7 +1767,8 @@
 					size = dim2(0, 324, 0, 410),
 					position = dim2(0, items.main_holder.AbsolutePosition.X + items.main_holder.AbsoluteSize.X + 2, 0, items.main_holder.AbsolutePosition.Y),
 					image = "rbxassetid://105199726008012",
-				}) 
+				})
+				holder.items.sgui.Enabled = false -- open only when clicked in the dock 
 
 				local items = holder.items
 
@@ -1823,7 +1829,8 @@
 					size = dim2(0, 300, 0, 325),
 					position = dim2(0, style.items.main_holder.AbsolutePosition.X, 0, style.items.main_holder.AbsolutePosition.Y + style.items.main_holder.AbsoluteSize.Y + 2),
 					image = "rbxassetid://77684377836328",
-				})  
+				})
+				holder.items.sgui.Enabled = false -- open only when clicked in the dock  
 				
 				local items = holder.items
 				
