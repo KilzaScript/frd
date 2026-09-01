@@ -1950,7 +1950,7 @@
 
 		function library:esp_preview(options)
 			options = options or {}
-			local cfg = {items={}, rotation=0, objects={}, lines={}, last_build=0}
+			local cfg = {items={}, rotation=0, objects={}, lines={}, last_build=tick() + 5}
 
 			-- Providers supplied by the main script so the preview always
 			-- mirrors the real ESP settings instead of dead flags.
@@ -2041,113 +2041,147 @@
 				end
 				return lines[i]
 			end
-			-- loads a REAL character that exists in the current game/session.
-			-- Two-stage loader: whole Model:Clone first, then a part-by-part
-			-- rebuild that works even when a game locks / patches cloning
-			-- (Arsenal, Rivals, etc).
+			-- Loads the configured avatar (userId 10073872791) DIRECTLY from
+			-- Roblox via HumanoidDescription, so the preview ALWAYS shows a
+			-- character — even in empty servers or games that lock cloning.
+			-- Falls back to a two-stage clone of a live in-session character
+			-- if the avatar fetch fails. Runs async so it never hitches.
 			local model, source, src_char
+			local avatar_built = false
+			local building = false
 			local function build()
-				if model then model:Destroy() model = nil end
-				source, src_char = nil, nil
+				if building then return end
+				building = true
+				task.spawn(function()
+					if model then model:Destroy() model = nil end
+					source, src_char = nil, nil
+					cfg.last_build = tick()
 
-				-- prefer another player's character, fall back to our own
-				local chosen
-				for _, pl in ipairs(players:GetPlayers()) do
-					local ch = pl.Character
-					if pl ~= lp and ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then
-						chosen = pl
-						break
-					end
-				end
-				if not chosen then
-					local ch = lp.Character
-					if ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then chosen = lp end
-				end
-				if not chosen or not chosen.Character then return end
-
-				local ch = chosen.Character
-				src_char = ch
-				source = chosen
-				cfg.last_build = tick()
-
-				local clone
-
-				-- stage 1: whole-model clone
-				pcall(function()
-					ch.Archivable = true
-					clone = ch:Clone()
-				end)
-
-				-- stage 2: part-by-part rebuild
-				if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
-					if clone then clone:Destroy() end
-					clone = Instance.new("Model")
-					local root = ch:FindFirstChild("HumanoidRootPart")
-						or ch.PrimaryPart
-						or ch:FindFirstChildWhichIsA("BasePart")
-					local pivot = root and root.CFrame or CFrame.new()
-					for _, d in ipairs(ch:GetDescendants()) do
-						if d:IsA("BasePart") and d.Transparency < 1 and d.Name ~= "HumanoidRootPart" then
-							pcall(function()
-								d.Archivable = true
-								local c = d:Clone()
-								c.Anchored = true
-								c.CanCollide = false
-								c.CanTouch = false
-								c.CanQuery = false
-								c.CFrame = pivot:ToObjectSpace(d.CFrame)
-								c.Parent = clone
-							end)
+					-- preferred: fixed avatar straight from Roblox
+					if not avatar_built then
+						avatar_built = true
+						local ok, rig = pcall(function()
+							local desc = players:GetHumanoidDescriptionFromUserId(10073872791)
+							return players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+						end)
+						if ok and rig and rig:FindFirstChildWhichIsA("BasePart") then
+							for _, d in ipairs(rig:GetDescendants()) do
+								if d:IsA("BasePart") then
+									pcall(function()
+										d.Anchored = true
+										d.CanCollide = false
+									end)
+								end
+							end
+							local hl = Instance.new("Highlight")
+							hl.FillTransparency = 0.5
+							hl.OutlineTransparency = 0
+							hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+							hl.Parent = rig
+							cfg.highlight = hl
+							rig.Parent = viewportframe
+							pcall(function() rig:PivotTo(CFrame.new()) end)
+							model = rig
+							building = false
+							return
 						end
 					end
-					-- invisible anchor part so PivotTo has a stable pivot
-					pcall(function()
-						local anchor = Instance.new("Part")
-						anchor.Name = "HumanoidRootPart"
-						anchor.Transparency = 1
-						anchor.Anchored = true
-						anchor.CanCollide = false
-						anchor.CanTouch = false
-						anchor.CanQuery = false
-						anchor.Size = Vector3.new(2, 2, 1)
-						anchor.CFrame = CFrame.new()
-						anchor.Parent = clone
-						clone.PrimaryPart = anchor
-					end)
-				end
 
-				if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
-					if clone then clone:Destroy() end
-					return
-				end
-
-				-- clean scripts / leftover highlights
-				for _, s in ipairs(clone:GetDescendants()) do
-					if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then
-						s:Destroy()
+					-- fallback: clone a live character from the current session
+					local chosen
+					for _, pl in ipairs(players:GetPlayers()) do
+						local ch = pl.Character
+						if pl ~= lp and ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then
+							chosen = pl
+							break
+						end
 					end
-				end
+					if not chosen then
+						local ch = lp.Character
+						if ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then chosen = lp end
+					end
 
-				local hl = Instance.new("Highlight")
-				hl.FillTransparency = 0.5
-				hl.OutlineTransparency = 0
-				hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-				hl.Parent = clone
-				cfg.highlight = hl
+					if chosen and chosen.Character then
+						local ch = chosen.Character
+						src_char = ch
+						source = chosen
 
-				-- anchor everything so the display rig is perfectly stable
-				for _, d in ipairs(clone:GetDescendants()) do
-					if d:IsA("BasePart") then
+						local clone
 						pcall(function()
-							d.Anchored = true
-							d.CanCollide = false
+							ch.Archivable = true
+							clone = ch:Clone()
 						end)
-					end
-				end
 
-				clone.Parent = viewportframe
-				pcall(function() clone:PivotTo(CFrame.new()) end)
-				model = clone
+						-- stage 2: part-by-part rebuild
+						if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
+							if clone then clone:Destroy() end
+							clone = Instance.new("Model")
+							local root = ch:FindFirstChild("HumanoidRootPart")
+								or ch.PrimaryPart
+								or ch:FindFirstChildWhichIsA("BasePart")
+							local pivot = root and root.CFrame or CFrame.new()
+							for _, d in ipairs(ch:GetDescendants()) do
+								if d:IsA("BasePart") and d.Transparency < 1 and d.Name ~= "HumanoidRootPart" then
+									pcall(function()
+										d.Archivable = true
+										local c = d:Clone()
+										c.Anchored = true
+										c.CanCollide = false
+										c.CanTouch = false
+										c.CanQuery = false
+										c.CFrame = pivot:ToObjectSpace(d.CFrame)
+										c.Parent = clone
+									end)
+								end
+							end
+							pcall(function()
+								local anchor = Instance.new("Part")
+								anchor.Name = "HumanoidRootPart"
+								anchor.Transparency = 1
+								anchor.Anchored = true
+								anchor.CanCollide = false
+								anchor.CanTouch = false
+								anchor.CanQuery = false
+								anchor.Size = Vector3.new(2, 2, 1)
+								anchor.CFrame = CFrame.new()
+								anchor.Parent = clone
+								clone.PrimaryPart = anchor
+							end)
+						end
+
+						if clone and clone:FindFirstChildWhichIsA("BasePart") then
+							for _, s in ipairs(clone:GetDescendants()) do
+								if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then
+									s:Destroy()
+								end
+							end
+
+							local hl = Instance.new("Highlight")
+							hl.FillTransparency = 0.5
+							hl.OutlineTransparency = 0
+							hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+							hl.Parent = clone
+							cfg.highlight = hl
+
+							for _, d in ipairs(clone:GetDescendants()) do
+								if d:IsA("BasePart") then
+									pcall(function()
+										d.Anchored = true
+										d.CanCollide = false
+									end)
+								end
+							end
+
+							clone.Parent = viewportframe
+							pcall(function() clone:PivotTo(CFrame.new()) end)
+							model = clone
+						else
+							if clone then clone:Destroy() end
+						end
+					end
+
+					building = false
+				end)
 			end
 
 			local R15_BONES = {
