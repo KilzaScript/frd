@@ -1,5979 +1,757 @@
--- REASON: Dumbass customer put their library in a request and flexed his non existant security and ended up getting it leaked by himself... ðŸ˜­
--- The code here is horrendous this is my 2nd library, the added on code was made to suit the old code however I should have just converted to a newer version of my code kind of an oopsie. 
+--[[═════════════════════════════════════════════════════════════════════
+    HATE UI  v1.0  —  complete rewrite
+    An animation-first GUI library:
+      · Quint/Back eased tweens everywhere (C++-style motion)
+      · CanvasGroup fade+scale transitions on every popup
+      · Modern pill toggles, live sliders, animated dropdowns
+      · Toast notification stack, loader screen, sidebar-tab window
+    ══════════════════════════════════════════════════════════════════════]]
 
--- variables
-	local uis = cloneref(game:GetService("UserInputService"))
-	local players = cloneref(game:GetService("Players"))
-	local ws = cloneref(game:GetService("Workspace"))
-	local http_service = cloneref(game:GetService("HttpService"))
-	local gui_service = cloneref(game:GetService("GuiService"))
-	local lighting = cloneref(game:GetService("Lighting"))
-	local run = cloneref(game:GetService("RunService"))
-	local stats = cloneref(game:GetService("Stats"))
-	local coregui = cloneref(game:GetService("CoreGui"))
-	local debris = cloneref(game:GetService("Debris"))
-	local tween_service = cloneref(game:GetService("TweenService"))
-	local sound_service = cloneref(game:GetService("SoundService"))
-	local starter_gui = cloneref(game:GetService("StarterGui"))
-	local rs = cloneref(game:GetService("ReplicatedStorage"))
+local library = {}
+library.__index = library
 
-	local vec2 = Vector2.new
-	local vec3 = Vector3.new
-	local dim2 = UDim2.new
-	local dim = UDim.new 
-	local rect = Rect.new
-	local cfr = CFrame.new
-	local empty_cfr = cfr()
-	local point_object_space = empty_cfr.PointToObjectSpace
-	local angle = CFrame.Angles
-	local dim_offset = UDim2.fromOffset
+-- services
+local UIS          = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Players      = game:GetService("Players")
+local LocalPlayer  = Players.LocalPlayer
+local holder       = (gethui and gethui()) or game:GetService("CoreGui")
 
-	local color = Color3.new
-	local hsv = Color3.fromHSV
-	local rgb = Color3.fromRGB
-	local hex = Color3.fromHex
-	local rgbseq = ColorSequence.new
-	local rgbkey = ColorSequenceKeypoint.new
-	local numseq = NumberSequence.new
-	local numkey = NumberSequenceKeypoint.new
+-- theme
+library.Theme = {
+	Accent      = Color3.fromRGB(220, 50, 75),
+	Background  = Color3.fromRGB(14, 14, 19),
+	Panel       = Color3.fromRGB(21, 21, 27),
+	Card        = Color3.fromRGB(31, 31, 40),
+	CardHover   = Color3.fromRGB(41, 41, 52),
+	Stroke      = Color3.fromRGB(50, 50, 62),
+	Text        = Color3.fromRGB(236, 236, 242),
+	SubText     = Color3.fromRGB(139, 139, 152),
+}
+local T = library.Theme
 
-	local camera = ws.CurrentCamera
-	local lp = players.LocalPlayer 
-	local mouse = lp:GetMouse() 
-	local gui_offset = gui_service:GetGuiInset().Y
+-- easing presets — fast attack, long silky decel (the "C++ feel")
+local Quint   = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+local BackOut = TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-	local max = math.max 
-	local floor = math.floor 
-	local min = math.min 
-	local abs = math.abs 
-	local noise = math.noise
-	local rad = math.rad 
-	local random = math.random 
-	local pow = math.pow 
-	local sin = math.sin 
-	local pi = math.pi 
-	local tan = math.tan 
-	local atan2 = math.atan2 
-	local cos = math.cos 
-	local round = math.round;
-	local clamp = math.clamp; 
-	local ceil = math.ceil; 
-	local sqrt = math.sqrt;
-	local acos = math.acos; 
+local function tween(obj, props, info)
+	return TweenService:Create(obj, info or Quint, props):Play()
+end
 
-	local insert = table.insert 
-	local find = table.find 
-	local remove = table.remove
-	local concat = table.concat
--- 
+function library:tween(obj, props, info)
+	return tween(obj, props, info)
+end
 
--- library init
-	local library = {
-		directory = "Atlanta",
-		folders = {
-			"/fonts",
-			"/configs",
-			"/images"
-		},
-		flags = {},
-		config_flags = {},
-		visible_flags = {}, 
-		guis = {}, 
-		connections = {},   
-		notifications = {},
-		playerlist_data = {},
-
-		current_tab, 
-		current_element_open, 
-		dock_button_holder,  
-		old_config; 
-		font, 
-		keybind_list,
-		binds = {}, 
-		
-		copied_flag; 
-		is_rainbow;
-
-		instances = {}; 
-		drawings = {};
-
-		display_orders = 0; 
-	}
-
-	local flags = library.flags
-	local config_flags = library.config_flags
-
-	local themes = {
-		preset = {
-			["outline"] = hex("#0A0A0A"), -- 
-			["inline"] = hex("#2D2D2D"), --
-			["accent"] = hex("#6078BE"), --
-			["high_contrast"] = hex("#141414"),
-			["low_contrast"] = hex("#1E1E1E"),
-			["text"] = hex("#B4B4B4"),
-			["text_outline"] = rgb(0, 0, 0),
-			["glow"] = hex("#6078BE"), 
-		},
-
-		utility = {
-			["outline"] = {
-				["BackgroundColor3"] = {}, 	
-				["Color"] = {}, 
-			},
-			["inline"] = {
-				["BackgroundColor3"] = {}, 	
-				["ImageColor3"] = {},
-			},
-			["accent"] = {
-				["BackgroundColor3"] = {}, 	
-				["TextColor3"] = {}, 
-				["ImageColor3"] = {}, 
-				["ScrollBarImageColor3"] = {} 
-			},
-			["contrast"] = {
-				["Color"] = {}, 	
-			},
-			["text"] = {
-				["TextColor3"] = {}, 	
-			},
-			["text_outline"] = {
-				["Color"] = {}, 	
-			},
-			["glow"] = {
-				["ImageColor3"] = {}, 	
-			}, 
-			["high_contrast"] = {
-				["BackgroundColor3"] = {},
-			},
-			["low_contrast"] = {
-				["BackgroundColor3"] = {},
-			}
-		}, 
-
-		find = {
-			["Frame"] = "BackgroundColor3", 
-			["TextLabel"] = "TextColor3", 
-			["UIGradient"] = "Color",
-			["UIStroke"] = "Color",
-			["ImageLabel"] = "ImageColor3",
-			["TextButton"] = "BackgroundColor3", 
-			["ScrollingFrame"] = "ScrollBarImageColor3"
-		}
-	}
-
-	local keys = {
-		[Enum.KeyCode.LeftShift] = "LS",
-		[Enum.KeyCode.RightShift] = "RS",
-		[Enum.KeyCode.LeftControl] = "LC",
-		[Enum.KeyCode.RightControl] = "RC",
-		[Enum.KeyCode.Insert] = "INS",
-		[Enum.KeyCode.Backspace] = "BS",
-		[Enum.KeyCode.Return] = "Ent",
-		[Enum.KeyCode.LeftAlt] = "LA",
-		[Enum.KeyCode.RightAlt] = "RA",
-		[Enum.KeyCode.CapsLock] = "CAPS",
-		[Enum.KeyCode.One] = "1",
-		[Enum.KeyCode.Two] = "2",
-		[Enum.KeyCode.Three] = "3",
-		[Enum.KeyCode.Four] = "4",
-		[Enum.KeyCode.Five] = "5",
-		[Enum.KeyCode.Six] = "6",
-		[Enum.KeyCode.Seven] = "7",
-		[Enum.KeyCode.Eight] = "8",
-		[Enum.KeyCode.Nine] = "9",
-		[Enum.KeyCode.Zero] = "0",
-		[Enum.KeyCode.KeypadOne] = "Num1",
-		[Enum.KeyCode.KeypadTwo] = "Num2",
-		[Enum.KeyCode.KeypadThree] = "Num3",
-		[Enum.KeyCode.KeypadFour] = "Num4",
-		[Enum.KeyCode.KeypadFive] = "Num5",
-		[Enum.KeyCode.KeypadSix] = "Num6",
-		[Enum.KeyCode.KeypadSeven] = "Num7",
-		[Enum.KeyCode.KeypadEight] = "Num8",
-		[Enum.KeyCode.KeypadNine] = "Num9",
-		[Enum.KeyCode.KeypadZero] = "Num0",
-		[Enum.KeyCode.Minus] = "-",
-		[Enum.KeyCode.Equals] = "=",
-		[Enum.KeyCode.Tilde] = "~",
-		[Enum.KeyCode.LeftBracket] = "[",
-		[Enum.KeyCode.RightBracket] = "]",
-		[Enum.KeyCode.RightParenthesis] = ")",
-		[Enum.KeyCode.LeftParenthesis] = "(",
-		[Enum.KeyCode.Semicolon] = ",",
-		[Enum.KeyCode.Quote] = "'",
-		[Enum.KeyCode.BackSlash] = "\\",
-		[Enum.KeyCode.Comma] = ",",
-		[Enum.KeyCode.Period] = ".",
-		[Enum.KeyCode.Slash] = "/",
-		[Enum.KeyCode.Asterisk] = "*",
-		[Enum.KeyCode.Plus] = "+",
-		[Enum.KeyCode.Period] = ".",
-		[Enum.KeyCode.Backquote] = "`",
-		[Enum.UserInputType.MouseButton1] = "MB1",
-		[Enum.UserInputType.MouseButton2] = "MB2",
-		[Enum.UserInputType.MouseButton3] = "MB3",
-		[Enum.KeyCode.Escape] = "ESC",
-		[Enum.KeyCode.Space] = "SPC",
-	}
-		
-	library.__index = library
-
-	for _, path in next, library.folders do 
-		makefolder(library.directory .. path)
-	end 
-
-	-- Font: use request() so 404s never throw, fall back to Gotham
-	local _fok, _fres = pcall(request, {Url="https://github.com/weasely111/beta/raw/refs/heads/main/fs-tahoma-8px.ttf", Method="GET"})
-	if _fok and _fres and _fres.StatusCode == 200 and _fres.Body and #_fres.Body > 1000 then
-		writefile("ffff.ttf", _fres.Body)
-		local _ft = {name="SmallestPixel7",faces={{name="Regular",weight=400,style="normal",assetId=getcustomasset("ffff.ttf")}}}
-		writefile("dddd.ttf", http_service:JSONEncode(_ft))
-		library.font = Font.new(getcustomasset("dddd.ttf"), Enum.FontWeight.Regular)
-	else
-		library.font = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Regular)
-	end
-
-	local config_holder 
--- 
-
--- library functions 
-	-- misc functions
-		function library:hoverify(hover, parent) 
-			local hover_instance = library:create("Frame", {
-				Parent = parent,
-				BackgroundTransparency = 1,
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.accent,
-				ZIndex = 1;
-			}) library:apply_theme(hover_instance, "accent", "BackgroundColor3") 
-
-			hover.MouseEnter:Connect(function()
-				library:tween(hover_instance, {
-					BackgroundTransparency = 0, 
-				}) 
-			end)
-			
-			hover.MouseLeave:Connect(function()
-				library:tween(hover_instance, {
-					BackgroundTransparency = 1, 
-				}) 
-			end)
-
-			return hover_instance;
-		end 
-
-		function library:hovering(Object)
-			if type(Object) == "table" then 
-				local Pass = false;
-
-				for _,obj in Object do 
-					if library:hovering(obj) then 
-						Pass = true
-						return Pass
-					end 
-				end 
-			else 
-				local y_cond = Object.AbsolutePosition.Y <= mouse.Y and mouse.Y <= Object.AbsolutePosition.Y + Object.AbsoluteSize.Y
-				local x_cond = Object.AbsolutePosition.X <= mouse.X and mouse.X <= Object.AbsolutePosition.X + Object.AbsoluteSize.X
-				
-				return (y_cond and x_cond)
-			end 
-		end  
-
-		function library:make_resizable(frame) 
-			local Frame = Instance.new("TextButton")
-			Frame.Position = dim2(1, -10, 1, -10)
-			Frame.BorderColor3 = rgb(0, 0, 0)
-			Frame.Size = dim2(0, 10, 0, 10)
-			Frame.BorderSizePixel = 0
-			Frame.BackgroundColor3 = rgb(255, 255, 255)
-			Frame.Parent = frame
-			Frame.BackgroundTransparency = 1 
-			Frame.Text = ""
-
-			local resizing = false 
-			local start_size 
-			local start 
-			local og_size = frame.Size  
-
-			Frame.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					resizing = true
-					start = input.Position
-					start_size = frame.Size
-				end
-			end)
-
-			Frame.InputEnded:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					resizing = false
-				end
-			end)
-
-			library:connection(uis.InputChanged, function(input, game_event) 
-				if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
-					local viewport_x = camera.ViewportSize.X
-					local viewport_y = camera.ViewportSize.Y
-
-					local current_size = dim2(
-						start_size.X.Scale,
-						math.clamp(
-							start_size.X.Offset + (input.Position.X - start.X),
-							og_size.X.Offset,
-							viewport_x
-						),
-						start_size.Y.Scale,
-						math.clamp(
-							start_size.Y.Offset + (input.Position.Y - start.Y),
-							og_size.Y.Offset,
-							viewport_y
-						)
-					)
-					frame.Size = current_size
-				end
-			end)
+-- instance helper
+local function mk(class, props, radius, stroked)
+	local ins = Instance.new(class)
+	for k, v in pairs(props) do
+		if k ~= "Parent" then
+			ins[k] = v
 		end
+	end
+	if radius then
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, radius)
+		c.Parent = ins
+	end
+	if stroked then
+		local s = Instance.new("UIStroke")
+		s.Color = T.Stroke
+		s.Thickness = 1
+		s.Transparency = 0.25
+		s.Parent = ins
+	end
+	if props.Parent then
+		ins.Parent = props.Parent
+	end
+	return ins
+end
+library.mk = mk
 
-		function library:draggify(frame)
-			local dragging = false 
-			local start_size = frame.Position
-			local start 
+-- create() — compatibility helper (auto-rounds real surfaces, skips strips)
+function library:create(class, props)
+	local ins = Instance.new(class)
+	for k, v in pairs(props) do
+		if k ~= "Parent" then
+			ins[k] = v
+		end
+	end
+	pcall(function()
+		local h = (typeof(props.Size) == "UDim2") and props.Size.Y.Offset or 99
+		if h > 14 and (class == "Frame" or class == "CanvasGroup" or class == "TextButton"
+			or class == "ImageButton" or class == "ImageLabel") then
+			local c = Instance.new("UICorner")
+			c.CornerRadius = UDim.new(0, 8)
+			c.Parent = ins
+		end
+	end)
+	if props.Parent then
+		ins.Parent = props.Parent
+	end
+	return ins
+end
 
-			frame.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					dragging = true
-					start = input.Position
-					start_size = frame.Position
-
-					if library.current_element_open then 
-						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
-						library.current_element_open = nil 
-					end 
-
-					if frame.Parent:IsA("ScreenGui") and frame.Parent.DisplayOrder ~= 999999 then 
-						library.display_orders += 1 -- shit code
-						frame.Parent.DisplayOrder = library.display_orders
-					end   
-				end
-			end)
-
-			frame.InputEnded:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+-- draggify — drag `target` by `handle` (defaults to the handle itself)
+function library:draggify(handle, target)
+	target = target or handle
+	local dragging, dragStart, startPos
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = target.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
 				end
 			end)
+		end
+	end)
+	UIS.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			local d = input.Position - dragStart
+			target.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + d.X,
+				startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		end
+	end)
+end
 
-			library:connection(uis.InputChanged, function(input, game_event) 
-				if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-					local viewport_x = camera.ViewportSize.X
-					local viewport_y = camera.ViewportSize.Y
+-- notifications — modern toast stack, top-right
+do
+	local gui = mk("ScreenGui", {Parent = holder, Name = "", DisplayOrder = 999990})
+	local stack = mk("Frame", {
+		Parent = gui,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -16, 0, 16),
+		Size = UDim2.fromOffset(300, 2000),
+		BackgroundTransparency = 1,
+	})
+	mk("UIListLayout", {Parent = stack, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder})
 
-					local current_position = dim2(
-						0,
-						clamp(
-							start_size.X.Offset + (input.Position.X - start.X),
-							0,
-							viewport_x - frame.Size.X.Offset
-						),
-						0,
-						clamp(
-							start_size.Y.Offset + (input.Position.Y - start.Y),
-							0,
-							viewport_y - frame.Size.Y.Offset
-						)
-					)
+	function library:Notification(cfg)
+		cfg = cfg or {}
+		local dur = cfg.Time or cfg.time or 4
 
-					frame.Position = current_position
+		local toast = mk("CanvasGroup", {
+			Parent = stack, Size = UDim2.new(1, 0, 0, 62),
+			BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+			GroupTransparency = 1,
+		}, 10, true)
+
+		mk("Frame", {
+			Parent = toast, Size = UDim2.new(0, 3, 1, -16),
+			Position = UDim2.new(0, 8, 0, 8),
+			BackgroundColor3 = T.Accent, BorderSizePixel = 0,
+		})
+
+		mk("TextLabel", {
+			Parent = toast, Text = cfg.Title or "HATE",
+			Font = Enum.Font.GothamBold, TextSize = 13,
+			TextColor3 = T.Accent, BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(20, 8), Size = UDim2.new(1, -30, 0, 16),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		mk("TextLabel", {
+			Parent = toast, Text = cfg.Text or cfg.text or "",
+			Font = Enum.Font.Gotham, TextSize = 12,
+			TextColor3 = T.SubText, BackgroundTransparency = 1, TextWrapped = true,
+			Position = UDim2.fromOffset(20, 26), Size = UDim2.new(1, -30, 0, 30),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+
+		local sc = mk("UIScale", {Parent = toast, Scale = 0.92})
+		tween(toast, {GroupTransparency = 0})
+		tween(sc, {Scale = 1}, BackOut)
+
+		task.delay(dur, function()
+			tween(toast, {GroupTransparency = 1})
+			tween(sc, {Scale = 0.92})
+			task.wait(0.3)
+			toast:Destroy()
+		end)
+	end
+
+	library.notification = library.Notification
+end
+
+-- loader — logo pop + progress bar, hands off to a callback
+function library:Loader(cfg)
+	cfg = cfg or {}
+	local dur = cfg.Time or 1.2
+
+	local gui = mk("ScreenGui", {Parent = holder, Name = "", DisplayOrder = 999999})
+	local back = mk("Frame", {
+		Parent = gui, Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(8, 8, 12),
+		BorderSizePixel = 0, BackgroundTransparency = 1,
+	})
+	local logo = mk("ImageLabel", {
+		Parent = gui, Image = cfg.Logo or "",
+		BackgroundTransparency = 1, ImageTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.45, 0),
+		Size = UDim2.fromOffset(190, 190),
+	})
+	local sc = mk("UIScale", {Parent = logo, Scale = 0.8})
+
+	local barBg = mk("Frame", {
+		Parent = gui, AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -70),
+		Size = UDim2.fromOffset(260, 4),
+		BackgroundColor3 = Color3.fromRGB(35, 35, 45),
+		BorderSizePixel = 0, BackgroundTransparency = 1,
+	}, 999)
+	local bar = mk("Frame", {
+		Parent = barBg, Size = UDim2.new(0, 0, 1, 0),
+		BackgroundColor3 = T.Accent, BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+	}, 999)
+
+	tween(back, {BackgroundTransparency = 0.2})
+	tween(logo, {ImageTransparency = 0, Size = UDim2.fromOffset(250, 250)}, BackOut)
+	tween(sc, {Scale = 1}, BackOut)
+	tween(barBg, {BackgroundTransparency = 0})
+	tween(bar, {BackgroundTransparency = 0})
+	tween(bar, {Size = UDim2.new(1, 0, 1, 0)},
+		TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
+
+	task.delay(dur + 0.2, function()
+		tween(logo, {ImageTransparency = 1, Size = UDim2.fromOffset(290, 290)},
+			TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In))
+		tween(back, {BackgroundTransparency = 1})
+		tween(barBg, {BackgroundTransparency = 1})
+		tween(bar, {BackgroundTransparency = 1})
+		task.wait(0.35)
+		gui:Destroy()
+		if cfg.Callback then
+			cfg.Callback()
+		end
+	end)
+end
+
+-- window — root container with sidebar tabs
+function library:Window(cfg)
+	cfg = cfg or {}
+	local self = setmetatable({}, library)
+	T.Accent = cfg.Accent or T.Accent
+
+	local W = (cfg.Size and cfg.Size.X) or 560
+	local H = (cfg.Size and cfg.Size.Y) or 380
+
+	local gui = mk("ScreenGui", {
+		Parent = holder, Name = "", DisplayOrder = 999998,
+		IgnoreGuiInset = true, Enabled = false,
+	})
+	self.Gui = gui
+
+	local root = mk("CanvasGroup", {
+		Parent = gui, Size = UDim2.fromOffset(W, H),
+		Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2),
+		BackgroundColor3 = T.Background,
+		GroupTransparency = 1, BorderSizePixel = 0,
+	}, 12, true)
+	local scale = mk("UIScale", {Parent = root, Scale = 0.94})
+	self.Root = root
+
+	-- topbar (drag handle)
+	local top = mk("Frame", {
+		Parent = root, Size = UDim2.new(1, 0, 0, 46),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+	})
+	if cfg.Logo then
+		mk("ImageLabel", {
+			Parent = top, Image = cfg.Logo, BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(24, 24), Position = UDim2.fromOffset(14, 11),
+		})
+	end
+	mk("TextLabel", {
+		Parent = top, Text = cfg.Title or "HATE",
+		Font = Enum.Font.GothamBold, TextSize = 14,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(cfg.Logo and 48 or 16, 0),
+		Size = UDim2.new(0, 220, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	if cfg.SubTitle then
+		mk("TextLabel", {
+			Parent = top, Text = cfg.SubTitle,
+			Font = Enum.Font.Gotham, TextSize = 12,
+			TextColor3 = T.SubText, BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, cfg.Logo and 49 or 17, 1, -8),
+			Size = UDim2.new(0, 220, 0, 12),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+	end
+
+	local visible = true
+	local function setVisible(v)
+		visible = v
+		if v then
+			gui.Enabled = true
+			root.GroupTransparency = 1
+			scale.Scale = 0.94
+			tween(root, {GroupTransparency = 0})
+			tween(scale, {Scale = 1}, BackOut)
+		else
+			tween(root, {GroupTransparency = 1})
+			tween(scale, {Scale = 0.94})
+			task.delay(0.22, function()
+				if not visible then
+					gui.Enabled = false
 				end
 			end)
 		end
+	end
+	self.SetVisible = setVisible
 
-		function library:new_drawing(class, properties)
-			local ins = Drawing.new(class)
+	local function topBtn(txt, off, cb)
+		local b = mk("TextButton", {
+			Parent = top, Text = txt, Font = Enum.Font.GothamBold, TextSize = 14,
+			TextColor3 = T.SubText, BackgroundColor3 = T.Card,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, off, 0.5, 0),
+			Size = UDim2.fromOffset(26, 22),
+			AutoButtonColor = false, BorderSizePixel = 0,
+		}, 6)
+		b.MouseEnter:Connect(function()
+			tween(b, {TextColor3 = T.Text, BackgroundColor3 = T.CardHover})
+		end)
+		b.MouseLeave:Connect(function()
+			tween(b, {TextColor3 = T.SubText, BackgroundColor3 = T.Card})
+		end)
+		b.MouseButton1Click:Connect(cb)
+	end
 
-			for _, v in next, properties do 
-				ins[_] = v
-			end 
+	topBtn("×", -12, function() gui:Destroy() end)
+	topBtn("–", -42, function() setVisible(false) end)
 
-			insert(library.drawings, ins)
+	library:draggify(top, root)
 
-			return ins 
-		end 
-		
-		function library:new_item(class, properties) 
-			local ins = Instance.new(class)
-
-			for _, v in next, properties do 
-				ins[_] = v
-			end 
-
-			insert(library.instances, ins)
-
-			return ins 
-		end 
-
-		function library:convert_enum(enum)
-			local enum_parts = {}
-		
-			for part in string.gmatch(enum, "[%w_]+") do
-				insert(enum_parts, part)
-			end
-		
-			local enum_table = Enum
-			for i = 2, #enum_parts do
-				local enum_item = enum_table[enum_parts[i]]
-		
-				enum_table = enum_item
-			end
-		
-			return enum_table
+	UIS.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightShift then
+			setVisible(not visible)
 		end
+	end)
 
-		function library:tween(obj, properties, info) 
-			local i = info or TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0)
-			local tween = tween_service:Create(obj, i, properties):Play()
-				
-			return tween
-		end 
+	-- sidebar + content
+	local side = mk("Frame", {
+		Parent = root, Position = UDim2.new(0, 0, 0, 46),
+		Size = UDim2.new(0, 132, 1, -46),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+	})
+	mk("UIPadding", {
+		Parent = side,
+		PaddingTop = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+	})
+	mk("UIListLayout", {Parent = side, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder})
 
-		-- smooth popup helper: fade + scale pop (C++-style eased transitions)
-		-- holder must be a CanvasGroup with a UIScale child
-		function library:popup_animate(holder, show)
-			local scale = holder:FindFirstChildOfClass("UIScale")
-			if show then
-				holder.Visible = true
-				holder.GroupTransparency = 1
-				if scale then scale.Scale = 0.92 end
-				library:tween(holder, {GroupTransparency = 0})
-				if scale then library:tween(scale, {Scale = 1}) end
+	local content = mk("Frame", {
+		Parent = root, Position = UDim2.new(0, 132, 0, 46),
+		Size = UDim2.new(1, -132, 1, -46),
+		BackgroundTransparency = 1, BorderSizePixel = 0,
+	})
+
+	local tabs = {}
+	local current = 0
+	local function select(idx)
+		if current == idx then return end
+		current = idx
+		for i, tab in ipairs(tabs) do
+			local active = (i == idx)
+			tween(tab.Button, {BackgroundColor3 = active and T.Card or T.Background})
+			tween(tab.Label, {TextColor3 = active and T.Text or T.SubText})
+			tab.Ind.Visible = active
+			if active then
+				tab.Page.Visible = true
+				tab.Page.GroupTransparency = 1
+				tab.Page.Position = UDim2.fromOffset(0, 10)
+				tween(tab.Page, {GroupTransparency = 0})
+				tween(tab.Page, {Position = UDim2.fromOffset(0, 0)})
 			else
-				library:tween(holder, {GroupTransparency = 1})
-				if scale then library:tween(scale, {Scale = 0.92}) end
-				task.delay(0.2, function()
-					if not holder:GetAttribute("open") then
-						holder.Visible = false
-					end
-				end)
+				tab.Page.Visible = false
 			end
-		end 
-
-		function library:config_list_update() 
-			if not config_holder then return end 
-		
-			local list = {}
-		
-			for idx, file in next, listfiles(library.directory .. "/configs") do
-				local name = string.sub(file:gsub(library.directory .. "/configs\\", ""):gsub(library.directory .. "\\configs\\", ""), 1, -5)
-				list[#list + 1] = name
-			end
-			
-			config_holder.refresh_options(list)
-		end 
-
-		function library:get_config()
-			local Config = {}
-		
-			for _, v in flags do
-				if type(v) == "table" and v.key then
-					Config[_] = {active = v.active, mode = v.mode, key = tostring(v.key)}
-				elseif type(v) == "table" and v["Transparency"] and v["Color"] then
-					Config[_] = {Transparency = v["Transparency"], Color = v["Color"]:ToHex()}
-				else
-					Config[_] = v
-				end
-			end 
-			
-			return http_service:JSONEncode(Config)
 		end
+	end
+	self.SelectTab = select
 
-		function library:load_config(config_json) 
-			local config = http_service:JSONDecode(config_json)
-		
-			for _, v in next, config do 
-				local function_set = library.config_flags[_]
-				
-				if function_set then 
-					if type(v) == "table" and v["Transparency"] and v["Color"] then
-						function_set(hex(v["Color"]), v["Transparency"])
-					elseif type(v) == "table" and v["active"] then 
-						function_set(v)
-					else 
-						function_set(v)
-					end
-				end 
-			end 
-		end 
-		
-		function library:round(number, float) 
-			local multiplier = 1 / (float or 1)
+	-- tab constructor
+	function self:Tab(name)
+		self.TabCount = (self.TabCount or 0) + 1
+		local idx = self.TabCount
 
-			return floor(number * multiplier + 0.5) / multiplier
-		end 
-
-		function library:apply_theme(instance, theme, property) 
-			insert(themes.utility[theme][property], instance)
-		end
-
-		function library:update_theme(theme, color)
-			for _, property in next, themes.utility[theme] do 
-
-				for m, object in next, property do 
-					if object[_] == themes.preset[theme] or object.ClassName == "UIGradient" then
-						object[_] = color 
-					end
-				end 
-			end 
-
-			themes.preset[theme] = color 
-		end 
-
-		function library:connection(signal, callback)
-			local connection = signal:Connect(callback)
-			
-			insert(library.connections, connection)
-
-			return connection 
-		end
-
-		function library:apply_stroke(parent) 
-			local stroke = library:create("UIStroke", {
-				Parent = parent,
-				Color = themes.preset.text_outline, 
-				LineJoinMode = Enum.LineJoinMode.Miter
-			}) 
-			
-			library:apply_theme(stroke, "text_outline", "Color")
-		end
-
-		function library:create(instance, options)
-			local ins = Instance.new(instance)
-
-			for prop, value in next, options do
-				ins[prop] = value
-			end
-
-			-- smooth look: rounded corners on real surfaces only — thin 1-3px
-			-- accent/border strips are skipped so no dark gaps show through
-			pcall(function()
-				if ins:IsA("Frame") or ins:IsA("CanvasGroup") or ins:IsA("TextButton") or ins:IsA("ImageButton")
-					or ins:IsA("TextBox") or ins:IsA("ScrollingFrame") or ins:IsA("ImageLabel") then
-					local h = (typeof(options.Size) == "UDim2") and options.Size.Y.Offset or 99
-					if h > 3 then
-						local corner = Instance.new("UICorner")
-						corner.CornerRadius = UDim.new(0, h <= 18 and 4 or 7)
-						corner.Parent = ins
-					end
-				end
-			end)
-
-			if instance == "TextLabel" or instance == "TextButton" or instance == "TextBox" then
-				library:apply_theme(ins, "text", "TextColor3")
-				library:apply_stroke(ins)
-			elseif instance == "ScreenGui" then
-				insert(library.guis, ins)
-			end
-
-			return ins
-		end
-	-- 
-
-	-- elements 
-		local tooltip_sgui = library:create("ScreenGui", {
-			Enabled = true,
-			Parent = gethui(),
-			Name = "",
-			DisplayOrder = 500, 
+		local btn = mk("TextButton", {
+			Parent = side, Text = "", AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, 30),
+			BackgroundColor3 = T.Background, BorderSizePixel = 0,
+		}, 8)
+		local ind = mk("Frame", {
+			Parent = btn, Size = UDim2.new(0, 3, 1, -10),
+			Position = UDim2.new(0, 4, 0, 5),
+			BackgroundColor3 = T.Accent, BorderSizePixel = 0,
+			Visible = false,
+		})
+		local lbl = mk("TextLabel", {
+			Parent = btn, Text = name, Font = Enum.Font.Gotham, TextSize = 13,
+			TextColor3 = T.SubText, BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -18, 1, 0),
+			TextXAlignment = Enum.TextXAlignment.Left,
 		})
 
-		function library:tool_tip(options) 
-			local cfg = {
-				name = options.name or "hi", 
-				path = options.path or nil, 
-			}
-
-			if cfg.path then 
-				local watermark_outline = library:create("Frame", {
-					Parent = tooltip_sgui,
-					Name = "",
-					Size = dim2(0, 0, 0, 22),
-					Position = dim2(0, 500, 0, 300),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					Visible = false,
-					AutomaticSize = Enum.AutomaticSize.X,
-					BackgroundColor3 = themes.preset.outline
-				})
-				
-				local watermark_inline = library:create("Frame", {
-					Parent = watermark_outline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				})
-				
-				local watermark_background = library:create("Frame", {
-					Parent = watermark_inline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = watermark_background,
-					Name = "",
-					Color = rgbseq{rgbkey(0, rgb(41, 41, 55)), rgbkey(1, rgb(35, 35, 47))}
-				}); library:apply_theme(UIGradient, "contrast", "Color")
-				
-				local text = library:create("TextLabel", {
-					Parent = watermark_background,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = " " .. cfg.name .. " ",
-					Size = dim2(0, 0, 1, 0),
-					BackgroundTransparency = 1,
-					Position = dim2(0, 0, 0, -1),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.X,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIStroke = library:create("UIStroke", {
-					Parent = text,
-					Name = "",
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-
-				cfg.path.MouseEnter:Connect(function()
-					watermark_outline.Visible = true 
-				end)   
-
-				cfg.path.MouseLeave:Connect(function()
-					watermark_outline.Visible = false 
-				end)
-
-				library:connection(uis.InputChanged, function(input)
-					if watermark_outline.Visible and input.UserInputType == Enum.UserInputType.MouseMovement then
-						watermark_outline.Position = dim_offset(input.Position.X + 10, input.Position.Y + 10)
-					end
-				end)
-			end 
-			
-			return cfg
-		end 
-
-		function library:panel(options) 
-			local cfg = {
-				name = options.text or options.name or "Window", 
-				size = options.size or dim2(0, 530, 0, 590),
-				position = options.position or dim2(0, 500, 0, 500),
-				anchor_point = options.anchor_point or vec2(0, 0),
-
-				-- button
-				image = options.image or "rbxassetid://79856374238119",
-				open = options.open or true,
-
-				-- ignore
-				items = {},
-			}
-			
-			local items = cfg.items do 
-				-- Panel
-					items.sgui = library:create("ScreenGui", {
-						Enabled = true,
-						Parent = gethui(),
-						Name = "" 
-					})
-					
-					items.main_holder = library:create("Frame", {
-						Parent = items.sgui,
-						Name = "",
-						AnchorPoint = vec2(cfg.anchor_point.X, cfg.anchor_point.Y),
-						Position = cfg.position,
-						Active = true, 
-						BorderColor3 = rgb(0, 0, 0),
-						Size = cfg.size,
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.outline
-					})
-					library:draggify(items.main_holder)
-					library:make_resizable(items.main_holder)
-
-					local Close = library:create( "TextButton" , {
-						Parent = items.main_holder;
-						FontFace = library.font;
-						Name = "\0";
-						AnchorPoint = vec2(1, 0);
-						Active = false;
-						BorderColor3 = rgb(0, 0, 0);
-						Text = "X";
-						Size = dim2(0, 0, 0, 0);
-						Selectable = false;
-						Position = dim2(1, -7, 0, 5);
-						BorderSizePixel = 0;
-						BackgroundTransparency = 1;
-						TextXAlignment = Enum.TextXAlignment.Right;
-						AutomaticSize = Enum.AutomaticSize.XY;
-						TextColor3 = themes.preset.text;
-						TextSize = 12;
-						ZIndex = 100;
-						BackgroundColor3 = rgb(255, 255, 255)
-					});
-
-					library:create( "UIStroke" , {
-						Parent = Close
-					});         
-					
-					Close.MouseButton1Click:Connect(function()
-						items.sgui.Enabled = false;
-					end)
-
-					--library:apply_theme(main_holder, "outline", "BackgroundColor3") 
-					
-					items.window_inline = library:create("Frame", {
-						Parent = items.main_holder,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.accent
-					})
-					
-					library:apply_theme(items.window_inline, "accent", "BackgroundColor3") 
-					
-					items.window_holder = library:create("Frame", {
-						Parent = items.window_inline,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = themes.preset.outline,
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-								
-					items.UIGradient = library:create("UIGradient", {
-						Parent = items.window_holder,
-						Name = "",
-						Rotation = 90,
-						Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-					})
-		
-					library:apply_theme(items.UIGradient, "contrast", "Color") 
-					
-					items.text = library:create("TextLabel", {
-						Parent = items.window_holder,
-						Name = "",
-						FontFace = library.font,
-						TextColor3 = themes.preset.accent,
-						BorderColor3 = rgb(0, 0, 0),
-						Text = cfg.name,
-						BackgroundTransparency = 1,
-						Position = dim2(0, 2, 0, 4),
-						BorderSizePixel = 0,
-						AutomaticSize = Enum.AutomaticSize.XY,
-						TextSize = 12,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) library:apply_theme(items.text, "accent", "TextColor3")
-					
-					items.UIStroke = library:create("UIStroke", {
-						Parent = items.text,
-						Name = "",
-						LineJoinMode = Enum.LineJoinMode.Miter
-					})
-					
-					items.UIPadding = library:create("UIPadding", {
-						Parent = items.window_holder,
-						Name = "",
-						PaddingBottom = dim(0, 4),
-						PaddingRight = dim(0, 4),
-						PaddingLeft = dim(0, 4)
-					})
-					
-					items.outline = library:create("Frame", {
-						Parent = items.window_holder,
-						Name = "",
-						Position = dim2(0, 0, 0, 18),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, 0, 1, -18),
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.inline
-					})
-					
-					library:apply_theme(items.outline, "inline", "BackgroundColor3") 
-					
-					items.inline = library:create("Frame", {
-						Parent = items.outline,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.outline
-					})
-					
-					library:apply_theme(items.inline, "outline", "BackgroundColor3") 
-					
-					items.holder = library:create("Frame", {
-						Parent = items.inline,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-					
-					items.UIGradient = library:create("UIGradient", {
-						Parent = items.holder,
-						Name = "",
-						Rotation = 90,
-						Color = rgbseq{
-							rgbkey(0, rgb(41, 41, 55)),
-							rgbkey(1, rgb(35, 35, 47))
-						}
-					})
-					
-					library:apply_theme(items.UIGradient, "contrast", "Color") 
-					
-					items.UIPadding = library:create("UIPadding", {
-						Parent = items.holder,
-						Name = "",
-						PaddingTop = dim(0, 5),
-						PaddingBottom = dim(0, 5),
-						PaddingRight = dim(0, 5),
-						PaddingLeft = dim(0, 5)
-					})
-					
-					items.glow = library:create("ImageLabel", {
-						Parent = items.main_holder,
-						Name = "",
-						ImageColor3 = themes.preset.glow,
-						ScaleType = Enum.ScaleType.Slice,
-						BorderColor3 = rgb(0, 0, 0),
-						BackgroundColor3 = rgb(255, 255, 255),
-						Visible = true,
-						Image = "http://www.roblox.com/asset/?id=18245826428",
-						BackgroundTransparency = 1,
-						ImageTransparency = 0.8, 
-						Position = dim2(0, -20, 0, -20),
-						Size = dim2(1, 40, 1, 40),
-						ZIndex = 2,
-						BorderSizePixel = 0,
-						SliceCenter = rect(vec2(21, 21), vec2(79, 79))
-					}) library:apply_theme(items.glow, "glow", "ImageColor3") 
-				-- 
-				
-				-- Button
-					items.button = library:create("TextButton", {
-						Parent = library.dock_holder,
-						Name = "",
-						TextColor3 = rgb(0, 0, 0),
-						BorderColor3 = rgb(0, 0, 0),
-						Text = "",
-						Size = dim2(0, 25, 0, 25),
-						BorderSizePixel = 0,
-						TextSize = 14,
-						BackgroundColor3 = themes.preset.inline
-					})
-					
-					local button_inline = library:create("Frame", {
-						Parent = items.button,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.outline
-					}) library:apply_theme(button_inline, "outline", "BackgroundColor3") 
-					
-					local button_inline = library:create("Frame", {
-						Parent = button_inline,
-						Name = "",
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, -2, 1, -2),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) library:apply_theme(button_inline, "inline", "BackgroundColor3")
-					
-					local UIGradient = library:create("UIGradient", {
-						Parent = button_inline,
-						Name = "",
-						Rotation = 90,
-						Color = rgbseq{
-							rgbkey(0, rgb(35, 35, 47)),
-							rgbkey(1, rgb(41, 41, 55))
-						}
-					}) library:apply_theme(UIGradient, "contrast", "Color") 
-					
-					items.Icon = library:create("ImageLabel", {
-						Parent = button_inline,
-						Name = "",
-						ImageColor3 = themes.preset.accent,
-						Image = cfg.image,
-						BackgroundTransparency = 1,
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, 0, 1, 0),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) library:apply_theme(items.Icon, "accent", "ImageColor3") library:apply_theme(items.Icon, "inline", "ImageColor3") 
-					
-					local UIPadding = library:create("UIPadding", {
-						Parent = button_inline,
-						Name = "",
-						PaddingTop = dim(0, 4),
-						PaddingBottom = dim(0, 4),
-						PaddingRight = dim(0, 4),
-						PaddingLeft = dim(0, 4)
-					})
-				-- 
-
-				library:tool_tip({name = cfg.name, path = items.button})
-			end 
-
-			items.sgui:GetPropertyChangedSignal("Enabled"):Connect(function()
-				items.Icon.ImageColor3 = items.sgui.Enabled and themes.preset.accent or themes.preset.inline
-			end)
-
-			items.button.MouseButton1Click:Connect(function()
-				items.sgui.Enabled = not items.sgui.Enabled
-			end)
-			
-			return setmetatable(cfg, library)
-		end 
-
-		local sgui = library:create("ScreenGui", {
-			Enabled = true,
-			Parent = gethui(),
-			Name = "",
-			DisplayOrder = 999999, 
+		local page = mk("CanvasGroup", {
+			Parent = content, Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1, BorderSizePixel = 0,
+			Visible = false, GroupTransparency = 1,
 		})
-
-		local notif_holder = library:create("ScreenGui", {
-			Parent = gethui(),
-			Name = "",
-			IgnoreGuiInset = true, 
-			DisplayOrder = 999999, 
-			ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		local scroll = mk("ScrollingFrame", {
+			Parent = page, Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1, BorderSizePixel = 0,
+			CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollBarThickness = 3, ScrollBarImageColor3 = T.Accent,
+			ScrollBarImageTransparency = 0.4,
 		})
+		mk("UIPadding", {
+			Parent = scroll,
+			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
+			PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10),
+		})
+		local list = mk("Frame", {
+			Parent = scroll, Size = UDim2.new(1, 0, 0, 0),
+			BackgroundTransparency = 1, BorderSizePixel = 0,
+			AutomaticSize = Enum.AutomaticSize.Y,
+		})
+		mk("UIListLayout", {Parent = list, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder})
 
-		function library:fold_elements(origin, elements)
-			for _, x in next, elements do 
-				local flag = library.visible_flags[x]
-
-				if flag then    
-					flag(flags[origin])
-				end     
-			end 
-		end 
-
-		function library:indicator() 
-			local cfg = {
-				items = {};
-			}
-
-			local items = cfg.items; do 
-				items.Window = library:create( "Frame" , {
-					Parent = sgui;
-					Name = "\0";
-					Position = dim2(0, 400, 0, 500);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(0, 322, 0, 147);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.outline
-				});	library:apply_theme(items.Window, "outline", "BackgroundColor3"); library:draggify(items.Window)
-				
-				items.InfoTitle = library:create( "TextLabel" , {
-					FontFace = library.font;
-					TextColor3 = themes.preset.text;
-					BorderColor3 = rgb(0, 0, 0);
-					Text = "Indicators";
-					Parent = items.Window;
-					Name = "\0";
-					Size = dim2(1, 0, 0, 0);
-					Position = dim2(0, 7, 0, 5);
-					BackgroundTransparency = 1;
-					TextXAlignment = Enum.TextXAlignment.Left;
-					BorderSizePixel = 0;
-					ZIndex = 5;
-					AutomaticSize = Enum.AutomaticSize.Y;
-					TextSize = 12;
-				}); 
-
-				items.Accent = library:create( "Frame" , {
-					Parent = items.Window;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.accent
-				});	library:apply_theme(items.Accent, "accent", "BackgroundColor3")
-				
-				items.Background = library:create( "Frame" , {
-					Parent = items.Accent;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.high_contrast
-				});	library:apply_theme(items.Background, "high_contrast", "BackgroundColor3")
-				
-				items.Inline = library:create( "Frame" , {
-					Parent = items.Background;
-					Name = "\0";
-					Position = dim2(0, 4, 0, 18);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -8, 1, -22);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.outline
-				});	library:apply_theme(items.Inline, "outline", "BackgroundColor3")
-				
-				items.Outline = library:create( "Frame" , {
-					Parent = items.Inline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.inline
-				});	library:apply_theme(items.Outline, "inline", "BackgroundColor3")
-				
-				items.LowContrast = library:create( "Frame" , {
-					Parent = items.Outline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.low_contrast
-				});	library:apply_theme(items.LowContrast, "low_contrast", "BackgroundColor3")
-				
-				items.Inline = library:create( "Frame" , {
-					Parent = items.LowContrast;
-					Name = "\0";
-					Position = dim2(0, 4, 0, 4);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -8, 1, -8);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.inline
-				});	library:apply_theme(items.Inline, "inline", "BackgroundColor3")
-				
-				items.Outline = library:create( "Frame" , {
-					Parent = items.Inline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.outline
-				});	library:apply_theme(items.Outline, "outline", "BackgroundColor3")
-				
-				items.LowContrast = library:create( "Frame" , {
-					Parent = items.Outline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.low_contrast
-				});	library:apply_theme(items.LowContrast, "low_contrast", "BackgroundColor3"); local image_holder = items.LowContrast;
-				
-				items.Inline = library:create( "Frame" , {
-					Parent = items.LowContrast;
-					Name = "\0";
-					Position = dim2(0, 4, 0, 4);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -8, 1, -8);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.inline
-				});	library:apply_theme(items.Inline, "inline", "BackgroundColor3")
-				
-				items.Outline = library:create( "Frame" , {
-					Parent = items.Inline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.outline
-				});	library:apply_theme(items.Outline, "outline", "BackgroundColor3")
-				
-				items.LowContrast = library:create( "Frame" , {
-					Parent = items.Outline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.low_contrast
-				});	library:apply_theme(items.LowContrast, "low_contrast", "BackgroundColor3")
-
-				items.InfoTitle = library:create( "TextLabel" , {
-					FontFace = library.font;
-					TextColor3 = themes.preset.text;
-					BorderColor3 = rgb(0, 0, 0);
-					Text = "Info";
-					Parent = items.Outline;
-					Name = "\0";
-					Size = dim2(1, 0, 0, 0);
-					Position = dim2(0, 7, 0, 5);
-					BackgroundTransparency = 1;
-					TextXAlignment = Enum.TextXAlignment.Left;
-					BorderSizePixel = 0;
-					ZIndex = 5;
-					AutomaticSize = Enum.AutomaticSize.Y;
-					TextSize = 12;
-				});
-
-				library:create( "UIStroke" , {
-					Parent = items.InfoTitle
-				});
-				
-				items.Accent = library:create( "Frame" , {
-					Name = "\0";
-					Parent = items.LowContrast;
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, 0, 0, 2);
-					BackgroundColor3 = themes.preset.accent;
-					BorderSizePixel = 0;
-				});	library:apply_theme(items.Accent, "accent", "BackgroundColor3");
-				
-				items.Shadow = library:create( "Frame" , {
-					AnchorPoint = vec2(0, 1);
-					Parent = items.Accent;
-					Name = "\0";
-					Position = dim2(0, 0, 1, 0);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, 0, 0, 1);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.accent;
-				}); library:apply_theme(items.Shadow, "accent", "BackgroundColor3");
-				
-				library:create( "UIGradient" , {
-					Rotation = 90;
-					Parent = items.Shadow;
-					Color = rgbseq{rgbkey(0, rgb(150, 150, 150)), rgbkey(1, rgb(150, 150, 150))}
-				});
-				
-				items.holder = library:create( "Frame" , {
-					Parent = items.LowContrast;
-					Name = "\0";
-					Position = dim2(0, 76, 0, 21);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -80, 0, 0);
-					BorderSizePixel = 0;
-				});	
-
-				library:create("UIListLayout", {
-					Parent = items.holder,
-					Padding = dim(0, 4),
-					HorizontalAlignment = Enum.HorizontalAlignment.Center,
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-
-				items.Inline = library:create( "Frame" , {
-					Parent = image_holder;
-					Name = "\0";
-					Position = dim2(0, 10, 0, 28);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(0, 68, 0, 67);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.outline
-				});	library:apply_theme(items.Inline, "outline", "BackgroundColor3")
-				
-				items.Outline = library:create( "Frame" , {
-					Parent = items.Inline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.inline
-				});	library:apply_theme(items.Outline, "inline", "BackgroundColor3")
-				
-				items.LowContrast = library:create( "Frame" , {
-					Parent = items.Outline;
-					Name = "\0";
-					Position = dim2(0, 1, 0, 1);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -2, 1, -2);
-					BorderSizePixel = 0;
-					BackgroundColor3 = themes.preset.low_contrast
-				});	library:apply_theme(items.LowContrast, "low_contrast", "BackgroundColor3")
-
-				items.Profile = library:create( "ImageLabel" , {
-					BorderColor3 = rgb(0, 0, 0);
-					Parent = items.LowContrast;
-					Image = "rbxasset://textures/ui/GuiImagePlaceholder.png";
-					BackgroundTransparency = 1;
-					Name = "\0";
-					Size = dim2(1, 0, 1, 0);
-					BorderSizePixel = 0;
-				});	
-
-				local section = setmetatable(items, library)
-				items.label = section:label({name = "Player: "})
-				items.slider = section:slider({name = "Health", custom = rgb(255, 0, 0), min = 0, max = 100, default = 50, input = true})
-				
-				library:create( "UIStroke" , {
-					Parent = items.InfoTitle
-				});            
-			end
-
-			function cfg.set_visible(bool)
-				items.Window.Visible = bool
-			end 
-
-			function cfg.change_health(int)
-				items.slider.set(int)
-			end
-
-			function cfg.change_profile(player)
-				items.label.set(string.format("Player: %s (%s)", player.Name, player.DisplayName))
-				items.Profile.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=".. player.UserId .."&width=420&height=420&format=png"
-			end 
-
-			return setmetatable(cfg, library)
-		end     
-
-		function library:window(properties)
-			local window = {opened = true}            
-			local opened = {}
-			local dock_outline;
-			local blur = library:create( "BlurEffect" , {
-				Parent = lighting;
-				Enabled = true;
-				Size = 15
-			});    
-
-			library.cache = library:create("ScreenGui", {
-				Enabled = false,
-				Parent = gethui(),
-				Name = "" 
-			})
-
-			function window.set_menu_visibility(bool) 
-				window.opened = bool 
-				
-				if bool then 
-					for _,gui in opened do 
-						gui.Enabled = true 
-					end 
-					opened = {}
-					if window.pop then 
-						window.pop(true) 
-					end
-				else
-					if window.pop then 
-						window.pop(false) 
-					end
-					task.delay(0.18, function()
-						for _,gui in library.guis do 
-							if gui.Enabled then 
-								gui.Enabled = false
-								table.insert(opened, gui)
-							end
-						end
-					end)
-				end
-
-				library:tween(blur, {Size = bool and (flags["Blur Size"] or 15) or 0})
-
-				dock_outline.Visible = bool;
-
-				sgui.Enabled = true
-				notif_holder.Enabled = true
-				tooltip_sgui.Enabled = true
-				library.cache.Enabled = false
-
-				for _,tooltip in tooltip_sgui:GetChildren() do 
-					tooltip.Visible = false;
-				end 
-
-				if library.current_element_open then 
-					library.current_element_open.set_visible(false)
-					library.current_element_open.open = false 
-					library.current_element_open = nil 
-				end
-			end 
-
-			-- dock init
-				dock_outline = library:create("Frame", {
-					Parent = sgui,
-					Name = "",
-					Visible = true,
-					BorderColor3 = rgb(0, 0, 0),
-					AnchorPoint = vec2(0.5, 0),
-					Position = dim2(0.5, 0, 0, 20),
-					Size = dim2(0, 157, 0, 39),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}); 
-
-				library:apply_theme(dock_outline, "outline", "BackgroundColor3"); 
-				dock_outline.Position = dim2(0, dock_outline.AbsolutePosition.X, 0, dock_outline.AbsolutePosition.Y); 
-				dock_outline.AnchorPoint = vec2(0, 0); 
-				library:draggify(dock_outline);
-
-				local dock_inline = library:create("Frame", {
-					Parent = dock_outline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(dock_inline, "inline", "BackgroundColor3") 
-				
-				local dock_holder = library:create("Frame", {
-					Parent = dock_inline,
-					Name = "",
-					Size = dim2(1, -2, 1, -2),
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = themes.preset.outline,
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				}) library:apply_theme(dock_holder, "outline", "BackgroundColor3") 
-				
-				local accent = library:create("Frame", {
-					Parent = dock_holder,
-					Name = "",
-					Size = dim2(1, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				}) library:apply_theme(accent, "accent", "BackgroundColor3") 
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = accent,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-					rgbkey(0, rgb(255, 255, 255)),
-					rgbkey(1, rgb(167, 167, 167))
-				}
-				})
-				
-				local button_holder = library:create("Frame", {
-					Parent = dock_holder,
-					Name = "",
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 1, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				}) library.dock_holder = button_holder;
-				
-				local UIListLayout = library:create("UIListLayout", {
-					Parent = button_holder,
-					Name = "",
-					Padding = dim(0, 5),
-					FillDirection = Enum.FillDirection.Horizontal,
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = button_holder,
-					Name = "",
-					PaddingTop = dim(0, 6),
-					PaddingBottom = dim(0, 4),
-					PaddingRight = dim(0, 4),
-					PaddingLeft = dim(0, 4)
-				})
-						
-				local UIGradient = library:create("UIGradient", {
-					Parent = dock_holder,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-			-- 
-
-			-- keybind list
-				local outline = library:create("Frame", {
-					Parent = sgui,
-					Name = "",
-					Visible = false, 
-					Active = true,
-					Draggable = true, 
-					Position = dim2(0, 50, 0, 200),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 182, 0, 25),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				})
-				library:apply_theme(outline, "outline", "BackgroundColor3") 
-				library:draggify(outline)
-				library:make_resizable(outline)
-				library.keybind_list_frame = outline 
-				
-				local inline = library:create("Frame", {
-					Parent = outline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				})
-				library:apply_theme(inline, "inline", "BackgroundColor3")
-
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, themes.preset.high_contrast),
-						rgbkey(1, themes.preset.low_contrast)
-					}
-				})
-				library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local bg = library:create("Frame", {
-					Parent = background,
-					Name = "a",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 0, 2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				}); library:apply_theme(bg, "accent", "BackgroundColor3")
-				
-				
-				library:create("UIGradient", {
-					Parent = bg,
-					Name = "",
-					Enabled = true, 
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-				
-				local text = library:create("TextLabel", {
-					Parent = background,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "Keybinds",
-					BackgroundTransparency = 1,
-					TextTruncate = Enum.TextTruncate.AtEnd,
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					TextSize = 12,
-					BackgroundColor3 = themes.preset.text
-				}, "text")
-				
-				local UIStroke = library:create("UIStroke", {
-					Parent = text,
-					Name = "",
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				local text_holder = library:create("Frame", {
-					Parent = background,
-					Name = "",
-					Position = dim2(0, -2, 1, 1),
-					Size = dim2(1, 4, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					BackgroundColor3 = themes.preset.outline
-				})
-				library:apply_theme(text_holder, "outline", "BackgroundColor3")
-
-				local inline = library:create("Frame", {
-					Parent = text_holder,
-					Name = "",
-					Size = dim2(1, -2, 1, -2),
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					--AutomaticSize = Enum.AutomaticSize.Y,
-					BackgroundColor3 = themes.preset.inline
-				})
-				library:apply_theme(inline, "inline", "BackgroundColor3")
-				
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "",
-					Size = dim2(1, -2, 1, -2),
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					--AutomaticSize = Enum.AutomaticSize.Y,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				library.keybind_list = background
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, themes.preset.high_contrast),
-						rgbkey(1, themes.preset.low_contrast)
-					}
-				})
-				library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				library:create("UIListLayout", {
-					Parent = background,
-					Name = "",
-					Padding = dim(0, -1),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-				
-				library:create("UIPadding", {
-					Parent = background,
-					Name = "",
-					PaddingBottom = dim(0, 4),
-					PaddingLeft = dim(0, 5)
-				})
-			--  
-
-			-- main window
-				local main_window = library:panel({
-					name = properties and properties.name or "Atlanta | ",
-					size = dim2(0, 604, 0, 628),
-					position = dim2(0, (camera.ViewportSize.X / 2) - 302 - 96, 0, (camera.ViewportSize.Y / 2) - 421 - 12),
-					image = "rbxassetid://98823308062942",
-				})
-
-				-- logo replaces the window title text when an icon is provided
-				if properties and properties.icon then
-					pcall(function()
-						local title_text = main_window.items.text
-						if title_text then title_text.Visible = false end
-						library:create("ImageLabel", {
-							Parent = main_window.items.window_holder,
-							Name = "",
-							Image = "rbxassetid://" .. tostring(properties.icon),
-							BackgroundTransparency = 1,
-							BorderSizePixel = 0,
-							Size = dim2(0, 110, 0, 14),
-							Position = dim2(0, 2, 0, 3),
-						})
-					end)
-				end
-
-				-- smooth window open/close pop (eased scale, C++-style feel)
-				local main_scale = library:create("UIScale", {Parent = main_window.items.main_holder, Scale = 1})
-				window.pop = function(show)
-					if show then
-						main_scale.Scale = 0.94
-						library:tween(main_scale, {Scale = 1})
-					else
-						library:tween(main_scale, {Scale = 0.94})
-					end
-				end
-
-				local items = main_window.items
-
-				window["tab_holder"] = library:create("Frame", {
-					Parent = items.holder,
-					Name = " ",
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 0, 22),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 5,
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				library:create("UIListLayout", {
-					Parent = window["tab_holder"],
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					Padding = dim(0, 2),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-
-				local section_holder = library:create("Frame", {
-					Parent = items.holder,
-					Name = " ",
-					BackgroundTransparency = 1,
-					Position = dim2(0, -1, 0, 19),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, -22),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				window["section_holder"] = section_holder
-
-				local outline = library:create("Frame", {
-					Parent = section_holder,
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				})
-				
-				library:apply_theme(outline, "outline", "BackgroundColor3") 
-
-				local inline = library:create("Frame", {
-					Parent = outline,
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				})
-				
-				library:apply_theme(inline, "inline", "BackgroundColor3") 
-
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				library.section_holder = background
-
-				library:create("UIPadding", {
-					Parent = background,
-					PaddingTop = dim(0, 4),
-					PaddingBottom = dim(0, 4),
-					PaddingRight = dim(0, 4),
-					PaddingLeft = dim(0, 4)
-				})
-
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				})
-				
-				library:apply_theme(UIGradient, "contrast", "Color") 
-				library:make_resizable(items.main_holder) 
-			-- 
-
-			-- theming 
-				local style = library:panel({
-					name = "Style", 
-					anchor_point = vec2(0, 0),
-					size = dim2(0, 394, 0, 464),
-					position = dim2(0, main_window.items.main_holder.AbsolutePosition.X + main_window.items.main_holder.AbsoluteSize.X + 2, 0, main_window.items.main_holder.AbsolutePosition.Y),
-					image = "rbxassetid://115194686863276",
-				})
-				style.items.sgui.Enabled = false -- open only when clicked in the dock
-
-				local watermark = library:watermark({default = os.date('Atlanta |  - %b %d %Y - %H:%M:%S')})  
-
-				task.spawn(function()
-					while task.wait(1) do 
-						watermark.change_text(os.date('Atlanta - Beta - %b %d %Y - %H:%M:%S'))
-					end 
-				end) 
-
-				local items = style.items
-
-				local column = setmetatable(items, library):column() 
-				local section = column:section({name = "Theme"})
-				section:label({name = "Accent"})
-				:colorpicker({name = "Accent", color = themes.preset.accent, flag = "accent", callback = function(color, alpha)
-					library:update_theme("accent", color)
-				end, flag = "Accent"})
-				section:label({name = "Contrast"})
-				:colorpicker({name = "Low", color = themes.preset.low_contrast, flag = "low_contrast", callback = function(color)
-					if (flags["high_contrast"] and flags["low_contrast"]) then 
-						library:update_theme("contrast", rgbseq{
-							rgbkey(0, flags["low_contrast"].Color),
-							rgbkey(1, flags["high_contrast"].Color)
-						})
-					end 
-
-					library:update_theme("low_contrast", flags["low_contrast"].Color)
-				end})
-				:colorpicker({name = "High", color = themes.preset.high_contrast, flag = "high_contrast", callback = function(color)
-					library:update_theme("contrast", rgbseq{
-						rgbkey(0, flags["low_contrast"].Color),
-						rgbkey(1, flags["high_contrast"].Color)
-					})
-
-					library:update_theme("high_contrast", flags["high_contrast"].Color)
-				end})
-				section:label({name = "Inline"})
-				:colorpicker({name = "Inline", color = themes.preset.inline, callback = function(color, alpha)
-					library:update_theme("inline", color)
-				end, flag = "Inline"})
-				section:label({name = "Outline"})
-				:colorpicker({name = "Outline", color = themes.preset.outline, callback = function(color, alpha)
-					library:update_theme("outline", color)
-				end, flag = "Outline"})
-				section:label({name = "Text Color"})
-				:colorpicker({name = "Main", color = themes.preset.text, callback = function(color, alpha)
-					library:update_theme("text", color)
-				end, flag = "Main"})
-				:colorpicker({name = "Outline", color = themes.preset.text_outline, callback = function(color, alpha)
-					library:update_theme("text_outline", color)
-				end, flag = "Outline"})
-				section:label({name = "Glow"})
-				:colorpicker({name = "Glow", color = themes.preset.glow, callback = function(color, alpha)
-					library:update_theme("glow", color)
-				end, flag = "Glow"})
-				section:slider({name = "Blur Size", flag = "Blur Size", min = 0, max = 56, default = 15, interval = 1, callback = function(int)
-					if window.opened then 
-						blur.Size = int
-					end
-				end})
-				local section = column:section({name = "Other"})
-				section:label({name = "UI Bind"})
-				:keybind({callback = window.set_menu_visibility, key = Enum.KeyCode.Insert})
-
-				-- RightShift also toggles the menu
-				library:connection(uis.InputBegan, function(input, gp)
-					if not gp and input.KeyCode == Enum.KeyCode.RightShift then
-						window.set_menu_visibility(not window.opened)
-					end
-				end)
-				section:toggle({name = "Keybind List", flag = "keybind_list", callback = function(bool)
-					library.keybind_list_frame.Visible = bool
-				end})
-				section:toggle({name = "Watermark", flag = "watermark", callback = function(bool)
-					watermark.set_visible(bool)
-				end})
-				section:button_holder({})
-				section:button({name = "Copy JobId", callback = function()
-					setclipboard(game.JobId)
-				end})
-				section:button_holder({})
-				section:button({name = "Copy GameID", callback = function()
-					setclipboard(game.GameId)
-				end})
-				section:button_holder({})
-				section:button({name = "Copy Join Script", callback = function()
-					setclipboard('game:GetService("TeleportService"):TeleportToPlaceInstance(' .. game.PlaceId .. ', "' .. game.JobId .. '", game.Players.LocalPlayer)')
-				end})
-				section:button_holder({})
-				section:button({name = "Rejoin", callback = function()
-					game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, lp)
-				end})
-				section:button_holder({})
-				section:button({name = "Join New Server", callback = function()
-					local apiRequest = game:GetService("HttpService"):JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-					local data = apiRequest.data[random(1, #apiRequest.data)]
-						
-					if data.playing <= flags["max_players"] then 
-						game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, data.id)
-					end 
-				end})
-				section:slider({name = "Max Players", flag = "max_players", min = 0, max = 40, default = 15, interval = 1})
-			-- 
-
-			-- cfg holder
-				local holder = library:panel({
-					name = "Configurations", 
-					size = dim2(0, 324, 0, 410),
-					position = dim2(0, items.main_holder.AbsolutePosition.X + items.main_holder.AbsoluteSize.X + 2, 0, items.main_holder.AbsolutePosition.Y),
-					image = "rbxassetid://105199726008012",
-				})
-				holder.items.sgui.Enabled = false -- open only when clicked in the dock 
-
-				local items = holder.items
-
-				getgenv().load_config = function(name)
-					library:load_config(readfile(library.directory .. "/configs/" .. name .. ".cfg"))
-				end 
-
-				local column = setmetatable(items, library):column() 
-				local section = column:section({name = "Options"})
-					config_holder = section:list({flag = "config_name_list"})
-					section:textbox({flag = "config_name_text_box"})
-					section:button_holder({})
-					section:button({name = "Create", callback = function()
-						writefile(library.directory .. "/configs/" .. flags["config_name_text_box"] .. ".cfg", library:get_config())
-						library:config_list_update()
-					end})
-					section:button({name = "Delete", callback = function()
-						delfile(library.directory .. "/configs/" .. flags["config_name_list"] .. ".cfg")
-						library:config_list_update()
-					end})
-					section:button_holder({})
-					section:button({name = "Load", callback = function()
-						library:load_config(readfile(library.directory .. "/configs/" .. flags["config_name_list"] .. ".cfg"))
-						library:notification({text = "Loaded Config: " .. flags["config_name_list"], time = 3})
-					end})
-					section:button({name = "Save", callback = function()
-						writefile(library.directory .. "/configs/" .. flags["config_name_list"] .. ".cfg", library:get_config())
-						library:config_list_update()
-						library:notification({text = "Saved Config: " .. flags["config_name_list"], time = 3})
-					end})
-					section:button_holder({})
-					section:button({name = "Refresh Configs", callback = function()
-						library:config_list_update()
-					end})
-					section:button_holder({})
-					section:button({name = "Unload Config", callback = function()
-						library:load_config(library.old_config)
-					end})
-					section:button({name = "Unload Menu", callback = function()
-						library:load_config(library.old_config)
-
-						for _, gui in library.guis do 
-							gui:Destroy() 
-						end 
-
-						for _, connection in library.connections do 
-							connection:Disconnect() 
-						end
-
-						blur:Destroy()
-					end})
-			-- 
-					
-			-- esp preview
-				local holder = library:panel({
-					name = "ESP Preview", 
-					anchor_point = vec2(0, 0),
-					size = dim2(0, 300, 0, 325),
-					position = dim2(0, style.items.main_holder.AbsolutePosition.X, 0, style.items.main_holder.AbsolutePosition.Y + style.items.main_holder.AbsoluteSize.Y + 2),
-					image = "rbxassetid://77684377836328",
-				})
-				holder.items.sgui.Enabled = false -- open only when clicked in the dock  
-				
-				local items = holder.items
-				
-				local column = setmetatable(items, library):column() 
-				window.esp_section = column:section({name = "Main"})
-			--  
-
-
-			return setmetatable(window, library)
+		local tab = {Button = btn, Label = lbl, Ind = ind, Page = page}
+		tabs[idx] = tab
+		btn.MouseButton1Click:Connect(function() select(idx) end)
+		if idx == 1 then
+			task.defer(function() select(1) end)
 		end
 
-		function library:watermark(options) 
-			local cfg = {
-				default = options.text or options.default or os.date('drain.lol | %b %d %Y | %H:%M')
-			}
+		return setmetatable({_List = list, _Gui = gui}, library)
+	end
 
-			local watermark_outline = library:create("Frame", {
-				Parent = sgui,
-				Name = "",
-				BorderColor3 = rgb(0, 0, 0),
-				AnchorPoint = vec2(1, 1),
-				Position = dim2(1, -20, 0, 20),
-				Size = dim2(0, 0, 0, 24),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundColor3 = themes.preset.outline
-			}) library:apply_theme(watermark_outline, "outline", "BackgroundColor3") 
-			watermark_outline.Position = dim_offset(watermark_outline.AbsolutePosition.X, watermark_outline.AbsolutePosition.Y)
-			library:draggify(watermark_outline)
+	return self
+end
 
-			local watermark_inline = library:create("Frame", {
-				Parent = watermark_outline,
-				Name = "",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(watermark_inline, "inline", "BackgroundColor3") 
-			
-			local watermark_background = library:create("Frame", {
-				Parent = watermark_inline,
-				Name = "",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local UIGradient = library:create("UIGradient", {
-				Parent = watermark_background,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-			}) library:apply_theme(UIGradient, "contrast", "Color") 
-			
-			local text = library:create("TextLabel", {
-				Parent = watermark_background,
-				Name = "",
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = "  drain.lol | Beta | Aug 29 2024 | 07:29:00  ",
-				Size = dim2(0, 0, 1, 0),
-				BackgroundTransparency = 1,
-				Position = dim2(0, -1, 0, 1),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.X,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			library:create("UIStroke", {
-				Parent = text,
-				Name = "",
-				LineJoinMode = Enum.LineJoinMode.Miter
-			})
-			
-			local accent = library:create("Frame", {
-				Parent = watermark_outline,
-				Name = "",
-				Position = dim2(0, 2, 0, 2),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -4, 0, 2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.accent
-			}) library:apply_theme(accent, "accent", "BackgroundColor3") 
-			
-			local UIGradient = library:create("UIGradient", {
-				Parent = accent,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(255, 255, 255)),
-					rgbkey(1, rgb(167, 167, 167))
-				}
-			})
-			
-			function cfg.change_text(input)
-				text.Text = "  ".. input .."  "
-			end 
+-- shared element row
+local function row(list, height)
+	return mk("Frame", {
+		Parent = list, Size = UDim2.new(1, 0, 0, height),
+		BackgroundColor3 = T.Card, BorderSizePixel = 0,
+	}, 8)
+end
 
-			function cfg.set_visible(bool) 
-				watermark_outline.Visible = bool
-			end 
+-- section — a grouped card inside a tab
+function library:Section(title)
+	local card = mk("CanvasGroup", {
+		Parent = self._List, Size = UDim2.new(1, 0, 0, 0),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		GroupTransparency = 1,
+	}, 10)
+	local sc = mk("UIScale", {Parent = card, Scale = 0.98})
+	tween(card, {GroupTransparency = 0})
+	tween(sc, {Scale = 1})
 
+	mk("TextLabel", {
+		Parent = card, Text = string.upper(title or "Section"),
+		Font = Enum.Font.GothamBold, TextSize = 11,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 10), Size = UDim2.new(1, -24, 0, 12),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	mk("Frame", {
+		Parent = card, Size = UDim2.new(1, -20, 0, 1),
+		Position = UDim2.new(0, 10, 0, 28),
+		BackgroundColor3 = T.Stroke, BorderSizePixel = 0, Transparency = 0.4,
+	})
 
-			cfg.change_text(cfg.default)
+	local list = mk("Frame", {
+		Parent = card, Position = UDim2.new(0, 8, 0, 36),
+		Size = UDim2.new(1, -16, 0, 0),
+		BackgroundTransparency = 1, BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
+	})
+	mk("UIListLayout", {Parent = list, Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder})
+	mk("UIPadding", {Parent = card, PaddingBottom = UDim.new(0, 10)})
 
-			return cfg 
+	return setmetatable({_List = list, _Gui = self._Gui}, library)
+end
 
-		end 
+-- toggle — modern animated pill switch
+function library:Toggle(cfg)
+	cfg = cfg or {}
+	local r = row(self._List, 34)
+	mk("TextLabel", {
+		Parent = r, Text = cfg.Name or "Toggle",
+		Font = Enum.Font.Gotham, TextSize = 13,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -70, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
 
-		function library:esp_preview(options)
-			options = options or {}
-			local cfg = {items={}, rotation=0, objects={}, lines={}, last_build=tick() + 5}
+	local pill = mk("Frame", {
+		Parent = r, AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(36, 18),
+		BackgroundColor3 = T.CardHover, BorderSizePixel = 0,
+	}, 999)
+	local knob = mk("Frame", {
+		Parent = pill, Size = UDim2.fromOffset(12, 12),
+		Position = UDim2.fromOffset(3, 3),
+		BackgroundColor3 = T.SubText, BorderSizePixel = 0,
+	}, 999)
 
-			-- Providers supplied by the main script so the preview always
-			-- mirrors the real ESP settings instead of dead flags.
-			local get_settings = options.settings or function() return {} end
-			local get_color    = options.color or function() return rgb(255, 255, 255) end
-
-			local cache = library.cache
-
-			-- viewport (a live character from the current session renders here)
-			local viewportframe = library:create("ViewportFrame",{
-				Parent=self.holder, BackgroundTransparency=1, Size=dim2(1,0,0,220),
-				BorderColor3=rgb(0,0,0), ZIndex=1, Position=dim2(0,0,0,10),
-				BorderSizePixel=0, BackgroundColor3=rgb(18,18,24),
-				Ambient=Color3.fromRGB(200,200,200), LightColor=Color3.fromRGB(255,255,255),
-				LightDirection=Vector3.new(-1,-2,-2)})
-			cfg.items.viewportframe = viewportframe
-
-			local vpcam = library:create("Camera",{FieldOfView=40, CameraType=Enum.CameraType.Scriptable,
-				Parent=viewportframe, Name="\0"})
-			cfg.items.camera = vpcam
-			viewportframe.CurrentCamera = vpcam
-			vpcam.CFrame = CFrame.new(0, 2.4, 10) * CFrame.Angles(math.rad(-12), 0, 0)
-
-			-- overlay holder (moved into the viewport when ESP is on)
-			local holder = library:create("Frame",{
-				Parent=cache, Name="\0", BackgroundTransparency=1, Position=dim2(0.5,0,0.5,0),
-				BorderColor3=rgb(0,0,0), Size=dim2(0,150,0,240), BorderSizePixel=0,
-				AnchorPoint=vec2(0.5,0.5), BackgroundColor3=rgb(255,255,255)})
-			cfg.objects["holder"]=holder
-
-			-- name tag
-			cfg.objects["name"]=library:create("TextLabel",{FontFace=library.font,TextColor3=rgb(220,50,75),
-				BorderColor3=rgb(0,0,0),Text="Preview",Parent=cache,TextStrokeTransparency=0,Name="\0",
-				AnchorPoint=vec2(0,1),Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,0,-5),
-				BorderSizePixel=0,AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
-
-			-- full box
-			cfg.objects["box_handler"]=library:create("Frame",{Parent=cache,Name="\0",
-				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
-				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
-			cfg.objects["box_color"]=library:create("UIStroke",{Color=rgb(220,50,75),
-				LineJoinMode=Enum.LineJoinMode.Miter,Name="\0",Parent=cfg.objects["box_handler"]})
-			cfg.objects["outline"]=library:create("Frame",{Parent=cfg.objects["box_handler"],Name="\0",
-				BackgroundTransparency=1,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
-				Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
-			library:create("UIStroke",{Parent=cfg.objects["outline"],LineJoinMode=Enum.LineJoinMode.Miter})
-
-			-- corner box
-			local corners=library:create("Frame",{Visible=true,BorderColor3=rgb(0,0,0),Parent=cache,
-				BackgroundTransparency=1,Position=dim2(0,-1,0,2),Name="\0",Size=dim2(1,0,1,0),
-				BorderSizePixel=0,BackgroundColor3=rgb(255,255,255)})
-			cfg.objects["corners"]=corners
-			local cc=rgb(220,50,75)
-			local cdefs={{p=dim2(0,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(0,0),r=0},
-				{p=dim2(0,0,0,1),s=dim2(0,3,0.25,0),a=vec2(0,0),r=0},
-				{p=dim2(1,0,0,-2),s=dim2(0.4,0,0,3),a=vec2(1,0),r=0},
-				{p=dim2(1,0,0,1),s=dim2(0,3,0.25,0),a=vec2(1,0),r=0},
-				{p=dim2(0,-1,1,-2),s=dim2(0.4,0,0,3),a=vec2(0,1),r=0},
-				{p=dim2(0,0,1,-4),s=dim2(0,3,0.25,1),a=vec2(0,1),r=180},
-				{p=dim2(1,-1,1,-2),s=dim2(0.4,0,0,3),a=vec2(1,1),r=0},
-				{p=dim2(1,0,1,-4),s=dim2(0,3,0.25,1),a=vec2(1,1),r=180}}
-			for i=1,#cdefs do
-				local d=cdefs[i]
-				local o=library:create("Frame",{Parent=corners,Name="line",Position=d.p,AnchorPoint=d.a,
-					Rotation=d.r,BorderColor3=rgb(0,0,0),Size=d.s,BorderSizePixel=0,BackgroundColor3=rgb(0,0,0)})
-				library:create("Frame",{Parent=o,Position=dim2(0,1,0,1),BorderColor3=rgb(0,0,0),
-					Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=cc})
-			end
-			-- health bar
-			local hbh=library:create("Frame",{AnchorPoint=vec2(1,0),Parent=cache,Name="\0",
-				Position=dim2(0,-5,0,0),BorderColor3=rgb(0,0,0),Size=dim2(0,4,1,0),BorderSizePixel=0,BackgroundColor3=rgb(0,0,0)})
-			cfg.objects["healthbar_holder"]=hbh
-			cfg.objects["healthbar"]=library:create("Frame",{Parent=hbh,Name="\0",Position=dim2(0,1,0,1),
-				BorderColor3=rgb(0,0,0),Size=dim2(1,-2,1,-2),BorderSizePixel=0,BackgroundColor3=rgb(0,255,0)})
-
-			-- distance
-			cfg.objects["distance"]=library:create("TextLabel",{FontFace=library.font,TextColor3=rgb(220,50,75),
-				BorderColor3=rgb(0,0,0),Text="0m",Parent=cache,TextStrokeTransparency=0,Name="\0",
-				Size=dim2(1,0,0,0),BackgroundTransparency=1,Position=dim2(0,0,1,5),BorderSizePixel=0,
-				AutomaticSize=Enum.AutomaticSize.Y,TextSize=12})
-
-			-- pooled 2D lines for the tracer / skeleton previews
-			local lines = cfg.lines
-			local function get_line(i)
-				if not lines[i] then
-					lines[i] = library:create("Frame",{Parent=cache,Name="\0",BackgroundTransparency=0.15,
-						BorderSizePixel=0,BackgroundColor3=rgb(220,50,75),AnchorPoint=vec2(0.5,0.5),ZIndex=5})
-				end
-				return lines[i]
-			end
-			-- Loads the configured avatar (userId 10073872791) DIRECTLY from
-			-- Roblox via HumanoidDescription, so the preview ALWAYS shows a
-			-- character — even in empty servers or games that lock cloning.
-			-- Falls back to a two-stage clone of a live in-session character
-			-- if the avatar fetch fails. Runs async so it never hitches.
-			local model, source, src_char
-			local avatar_built = false
-			local building = false
-			local function build()
-				if building then return end
-				building = true
-				task.spawn(function()
-					if model then model:Destroy() model = nil end
-					source, src_char = nil, nil
-					cfg.last_build = tick()
-
-					-- preferred: fixed avatar straight from Roblox
-					if not avatar_built then
-						avatar_built = true
-						local ok, rig = pcall(function()
-							local desc = players:GetHumanoidDescriptionFromUserId(10073872791)
-							return players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
-						end)
-						if ok and rig and rig:FindFirstChildWhichIsA("BasePart") then
-							for _, d in ipairs(rig:GetDescendants()) do
-								if d:IsA("BasePart") then
-									pcall(function()
-										d.Anchored = true
-										d.CanCollide = false
-									end)
-								end
-							end
-							local hl = Instance.new("Highlight")
-							hl.FillTransparency = 0.5
-							hl.OutlineTransparency = 0
-							hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-							hl.Parent = rig
-							cfg.highlight = hl
-							rig.Parent = viewportframe
-							pcall(function() rig:PivotTo(CFrame.new()) end)
-							model = rig
-							building = false
-							return
-						end
-					end
-
-					-- fallback: clone a live character from the current session
-					local chosen
-					for _, pl in ipairs(players:GetPlayers()) do
-						local ch = pl.Character
-						if pl ~= lp and ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then
-							chosen = pl
-							break
-						end
-					end
-					if not chosen then
-						local ch = lp.Character
-						if ch and ch.Parent and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChildWhichIsA("BasePart")) then chosen = lp end
-					end
-
-					if chosen and chosen.Character then
-						local ch = chosen.Character
-						src_char = ch
-						source = chosen
-
-						local clone
-						pcall(function()
-							ch.Archivable = true
-							clone = ch:Clone()
-						end)
-
-						-- stage 2: part-by-part rebuild
-						if not clone or not clone:FindFirstChildWhichIsA("BasePart") then
-							if clone then clone:Destroy() end
-							clone = Instance.new("Model")
-							local root = ch:FindFirstChild("HumanoidRootPart")
-								or ch.PrimaryPart
-								or ch:FindFirstChildWhichIsA("BasePart")
-							local pivot = root and root.CFrame or CFrame.new()
-							for _, d in ipairs(ch:GetDescendants()) do
-								if d:IsA("BasePart") and d.Transparency < 1 and d.Name ~= "HumanoidRootPart" then
-									pcall(function()
-										d.Archivable = true
-										local c = d:Clone()
-										c.Anchored = true
-										c.CanCollide = false
-										c.CanTouch = false
-										c.CanQuery = false
-										c.CFrame = pivot:ToObjectSpace(d.CFrame)
-										c.Parent = clone
-									end)
-								end
-							end
-							pcall(function()
-								local anchor = Instance.new("Part")
-								anchor.Name = "HumanoidRootPart"
-								anchor.Transparency = 1
-								anchor.Anchored = true
-								anchor.CanCollide = false
-								anchor.CanTouch = false
-								anchor.CanQuery = false
-								anchor.Size = Vector3.new(2, 2, 1)
-								anchor.CFrame = CFrame.new()
-								anchor.Parent = clone
-								clone.PrimaryPart = anchor
-							end)
-						end
-
-						if clone and clone:FindFirstChildWhichIsA("BasePart") then
-							for _, s in ipairs(clone:GetDescendants()) do
-								if s:IsA("BaseScript") or s:IsA("ModuleScript") or s:IsA("Highlight") then
-									s:Destroy()
-								end
-							end
-
-							local hl = Instance.new("Highlight")
-							hl.FillTransparency = 0.5
-							hl.OutlineTransparency = 0
-							hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-							hl.Parent = clone
-							cfg.highlight = hl
-
-							for _, d in ipairs(clone:GetDescendants()) do
-								if d:IsA("BasePart") then
-									pcall(function()
-										d.Anchored = true
-										d.CanCollide = false
-									end)
-								end
-							end
-
-							clone.Parent = viewportframe
-							pcall(function() clone:PivotTo(CFrame.new()) end)
-							model = clone
-						else
-							if clone then clone:Destroy() end
-						end
-					end
-
-					building = false
-				end)
-			end
-
-			local R15_BONES = {
-				{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
-				{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
-				{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
-				{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
-				{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}}
-			local R6_BONES = {
-				{"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}
-			function cfg.refresh_elements()
-				build()
-			end
-
-			-- live update loop: mirrors settings + real health/distance, spins the model
-			library:connection(run.RenderStepped, function(dt)
-				cfg.rotation = (cfg.rotation + dt * 45) % 360
-
-				-- keep the model synced with the live session (debounced):
-				-- rebuild when the source leaves, or respawns into a NEW
-				-- character. If the character is temporarily nil (death /
-				-- loading) we keep showing the last model instead of
-				-- spamming clone attempts every frame.
-				if source and (not source.Parent or (source.Character and source.Character ~= src_char)) then
-					if tick() - cfg.last_build > 1.5 then
-						build()
-					end
-				elseif not model and tick() - cfg.last_build > 2 then
-					build()
-				end
-
-				if model then
-					model:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(cfg.rotation), 0))
-				end
-
-				local S = get_settings() or {}
-				local col = get_color() or rgb(255, 255, 255)
-				local enabled = S.enabled and true or false
-
-				holder.Parent = enabled and viewportframe or cache
-
-				-- chams preview
-				if cfg.highlight then
-					cfg.highlight.Enabled = enabled and (S.chams and true or false)
-					cfg.highlight.FillColor = col
-					cfg.highlight.OutlineColor = col
-				end
-
-				-- name
-				local name_obj = cfg.objects["name"]
-				if enabled and S.names then
-					name_obj.Parent = holder
-					name_obj.TextColor3 = col
-					name_obj.Text = source and string.format("%s (@%s)", source.DisplayName, source.Name) or "Preview"
-				else
-					name_obj.Parent = cache
-				end
-
-				-- health bar (live values from the real character)
-				local hum = source and source.Character and source.Character:FindFirstChildOfClass("Humanoid")
-				local pct = hum and math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1) or 1
-				local hbh_obj = cfg.objects["healthbar_holder"]
-				if enabled and S.health then
-					hbh_obj.Parent = holder
-					cfg.objects["healthbar"].Size = UDim2.new(1, -2, pct, -2)
-					cfg.objects["healthbar"].Position = UDim2.new(0, 1, 1 - pct, 1)
-					cfg.objects["healthbar"].BackgroundColor3 = rgb(255, 0, 0):Lerp(rgb(0, 255, 0), pct)
-				else
-					hbh_obj.Parent = cache
-				end
-
-				-- distance (live)
-				local dist_obj = cfg.objects["distance"]
-				if enabled and S.distance then
-					local dist = 0
-					local myhrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-					local srchrp = source and source.Character and source.Character:FindFirstChild("HumanoidRootPart")
-					if myhrp and srchrp then dist = (myhrp.Position - srchrp.Position).Magnitude end
-					dist_obj.Text = string.format("%dm", math.floor(dist + 0.5))
-					dist_obj.TextColor3 = col
-					dist_obj.Parent = holder
-				else
-					dist_obj.Parent = cache
-				end
-
-				-- box
-				cfg.objects["box_color"].Color = col
-				if enabled and S.boxes then
-					if S.box_style == "Corners" then
-						corners.Parent = holder
-						cfg.objects["box_handler"].Parent = cache
-					else
-						cfg.objects["box_handler"].Parent = holder
-						corners.Parent = cache
-					end
-					for _, c in ipairs(corners:GetChildren()) do
-						local inner = c:IsA("Frame") and c:FindFirstChildOfClass("Frame")
-						if inner then inner.BackgroundColor3 = col end
-					end
-				else
-					corners.Parent = cache
-					cfg.objects["box_handler"].Parent = cache
-				end
-
-				-- pooled lines: tracer + skeleton previews
-				local line_i = 0
-				if enabled and model and (S.tracers or S.skeleton) then
-					local vp_pos = viewportframe.AbsolutePosition
-					local vp_size = viewportframe.AbsoluteSize
-
-					if S.tracers then
-						local h_pos = holder.AbsolutePosition
-						local h_size = holder.AbsoluteSize
-						local a = vec2(vp_size.X / 2, vp_size.Y)
-						local b = vec2(h_pos.X - vp_pos.X + h_size.X / 2, h_pos.Y - vp_pos.Y + h_size.Y)
-						line_i = line_i + 1
-						local l = get_line(line_i)
-						l.Parent = viewportframe
-						l.BackgroundColor3 = col
-						l.Position = dim_offset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
-						l.Size = dim2(0, math.max((b - a).Magnitude, 1), 0, 1)
-						l.Rotation = math.deg(math.atan2(b.Y - a.Y, b.X - a.X))
-					end
-
-					if S.skeleton then
-						local bones = model:FindFirstChild("UpperTorso") and R15_BONES or R6_BONES
-						for _, bone in ipairs(bones) do
-							local p1 = model:FindFirstChild(bone[1])
-							local p2 = model:FindFirstChild(bone[2])
-							if p1 and p2 and p1:IsA("BasePart") and p2:IsA("BasePart") then
-								local s1 = vpcam:WorldToViewportPoint(p1.Position)
-								local s2 = vpcam:WorldToViewportPoint(p2.Position)
-								if s1.Z > 0 and s2.Z > 0 then
-									line_i = line_i + 1
-									local l = get_line(line_i)
-									local a = vec2(s1.X, s1.Y)
-									local b = vec2(s2.X, s2.Y)
-									l.Parent = viewportframe
-									l.BackgroundColor3 = col
-									l.Position = dim_offset((a.X + b.X) / 2, (a.Y + b.Y) / 2)
-									l.Size = dim2(0, math.max((b - a).Magnitude, 1), 0, 1)
-									l.Rotation = math.deg(math.atan2(b.Y - a.Y, b.X - a.X))
-								end
-							end
-						end
-					end
-				end
-				for i = line_i + 1, #lines do
-					lines[i].Parent = cache
-				end
-			end)
-			return setmetatable(cfg, library)
+	local value = cfg.Default and true or false
+	local function set(v, silent)
+		value = v
+		tween(pill, {BackgroundColor3 = v and T.Accent or T.CardHover})
+		tween(knob, {
+			Position = v and UDim2.new(1, -15, 0, 3) or UDim2.fromOffset(3, 3),
+			BackgroundColor3 = v and Color3.fromRGB(255, 255, 255) or T.SubText,
+		})
+		if not silent and cfg.Callback then
+			cfg.Callback(v)
 		end
-		function library:refresh_notifications()  	
-			for _, notif in next, library.notifications do 
-				tween_service:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = dim2(0, 20, 0, 72 + (_ * 28))}):Play()
-			end     
+	end
+
+	local hit = mk("TextButton", {
+		Parent = r, Text = "", BackgroundTransparency = 1,
+		BorderSizePixel = 0, Size = UDim2.fromScale(1, 1),
+	})
+	hit.MouseButton1Click:Connect(function() set(not value) end)
+	set(value, true)
+
+	return {Set = set, Get = function() return value end}
+end
+
+-- slider — live fill + draggable knob
+function library:Slider(cfg)
+	cfg = cfg or {}
+	local min = cfg.Min or 0
+	local max = cfg.Max or 100
+	local value = cfg.Default or min
+	local suffix = cfg.Suffix or ""
+
+	local r = row(self._List, 44)
+	mk("TextLabel", {
+		Parent = r, Text = cfg.Name or "Slider",
+		Font = Enum.Font.Gotham, TextSize = 13, TextColor3 = T.Text,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 4), Size = UDim2.new(0, 160, 0, 16),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	local valLabel = mk("TextLabel", {
+		Parent = r, Text = "", Font = Enum.Font.Gotham, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -12, 0, 4), Size = UDim2.new(0, 90, 0, 16),
+		TextXAlignment = Enum.TextXAlignment.Right,
+	})
+
+	local track = mk("Frame", {
+		Parent = r, Position = UDim2.new(0, 12, 1, -16),
+		Size = UDim2.new(1, -24, 0, 4),
+		BackgroundColor3 = T.CardHover, BorderSizePixel = 0,
+	}, 999)
+	local fill = mk("Frame", {
+		Parent = track, Size = UDim2.new(0, 0, 1, 0),
+		BackgroundColor3 = T.Accent, BorderSizePixel = 0,
+	}, 999)
+	local knob = mk("Frame", {
+		Parent = track, AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(12, 12),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BorderSizePixel = 0, ZIndex = 2,
+	}, 999)
+
+	local function setVal(v, silent)
+		v = math.clamp(math.floor(v + 0.5), min, max)
+		local a = (v - min) / (max - min)
+		fill.Size = UDim2.new(a, 0, 1, 0)
+		knob.Position = UDim2.new(a, 0, 0.5, 0)
+		valLabel.Text = tostring(v) .. suffix
+		value = v
+		if not silent and cfg.Callback then
+			cfg.Callback(v)
 		end
+	end
+	setVal(value, true)
 
-		function library:notification(properties)
-			local cfg = {
-				time = properties.time or 5,
-				text = properties.text or properties.name or "Notification",
-				flashing = false, 
-			}
-		
-			-- Instances
-				local watermark_outline = library:create("Frame", {
-					Parent = notif_holder,
-					Name = "",
-					Size = UDim2.new(0, 0, 0, 24),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					Position = UDim2.new(0, 20, 0, 72 + (#library.notifications * 28)),
-					AutomaticSize = Enum.AutomaticSize.X,
-					BackgroundColor3 = themes.preset.outline,
-					AnchorPoint = Vector2.new(1, 0)
-				})
-			
-				local watermark_inline = library:create("Frame", {
-					Parent = watermark_outline,
-					Name = "",
-					Position = UDim2.new(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = UDim2.new(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				})
-
-				local watermark_background = library:create("Frame", {
-					Parent = watermark_inline,
-					Name = "",
-					Position = UDim2.new(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = UDim2.new(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-		
-				local UIGradient = library:create("UIGradient", {
-					Parent = watermark_background,
-					Name = "",
-					Color = ColorSequence.new{
-						rgbkey(0, themes.preset.high_contrast),
-						rgbkey(1, themes.preset.low_contrast)
-					}
-				})
-		
-				local text = library:create("TextLabel", {
-					Parent = watermark_background,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "  " .. cfg.text .. "  ",
-					Size = UDim2.new(0, 0, 1, 0),
-					BackgroundTransparency = 1,
-					Position = UDim2.new(0, 0, 0, -1),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.X,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-		
-				local accent = library:create("Frame", {
-					Parent = watermark_outline,
-					Name = "",
-					Position = UDim2.new(0, 2, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = UDim2.new(0, 1, 1, -4),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				})
-
-				library:apply_theme(accent, "accent", "BackgroundColor3")
-		
-				local UIGradient = library:create("UIGradient", {
-					Parent = accent,
-					Name = "",
-					Rotation = 90,
-					Color = ColorSequence.new{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-				
-				local accent_bottom = library:create("Frame", {
-					Parent = watermark_outline,
-					Name = "",
-					Position = UDim2.new(0, 2, 1, -3),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = UDim2.new(0, -4, 0, 1),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = accent,
-					Name = "",
-					Rotation = 90,
-					Color = ColorSequence.new{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-
-				local index = #library.notifications + 1
-				library.notifications[index] =watermark_outline
-
-				library:refresh_notifications()
-
-				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = Vector2.new(0, 0)}):Play()
-				
-				tween_service:Create(accent_bottom, TweenInfo.new(cfg.time, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {Size = UDim2.new(1, -4, 0, 1)}):Play()
-			--
-			
-			task.spawn(function()
-				task.wait(cfg.time)
-
-				library.notifications[index] = nil
-
-				tween_service:Create(watermark_outline, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {AnchorPoint = Vector2.new(1, 0), BackgroundTransparency = 1}):Play()
-				
-				for _, v in next, watermark_outline:GetDescendants() do 
-					if v:IsA("TextLabel") then 
-						tween_service:Create(v, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {TextTransparency = 1}):Play()
-					elseif v:IsA("Frame") then 
-						tween_service:Create(v, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {BackgroundTransparency = 1}):Play()
-					elseif v:IsA("ImageLabel") then
-						tween_service:Create(v, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {ImageTransparency = 1}):Play()
-					elseif v:IsA("UIStroke") then 
-						tween_service:Create(v, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {Transparency = 1}):Play()
-					end 
-				end 
-
-				task.wait(1)
-
-				watermark_outline:Destroy()
-			end)    
-		end 
-
-		function library:tab(options)	
-			local cfg = {
-				name = options.name or "tab", 
-				enabled = false, 
-			}
-			
-			-- button instances
-				local tab_holder = library:create("TextButton", {
-					Parent = self.tab_holder,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					Name = "\0",
-					BorderSizePixel = 0,
-					Size = dim2(0, 0, 1, -2),
-					ZIndex = 5,
-					TextSize = 12,
-					BackgroundColor3 = themes.preset.outline,
-					AutoButtonColor = false
-				}) library:apply_theme(tab_holder, "outline", "BackgroundColor3") 
-
-				local inline = library:create("Frame", {
-					Parent = tab_holder,
-					Size = dim2(1, -2, 1, 0),
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 5,
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-
-				local background = library:create("Frame", {
-					Parent = inline,
-					Size = dim2(1, -2, 1, -1),
-					Name = "\0",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 5,
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Color = rgbseq{rgbkey(0, rgb(41, 41, 55)), rgbkey(1, rgb(35, 35, 47))}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-
-				local text = library:create("TextLabel", {
-					Parent = background,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = cfg.name,
-					Name = "\0",
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.X,
-					TextSize = 12,
-					ZIndex = 5,
-					BackgroundColor3 = rgb(255, 255, 255)
-				}, "text")
-				library:apply_theme(text, "accent", "TextColor3")
-			-- 
-
-			-- section instances 
-				local section_holder = library:create("Frame", {
-					Parent = library.section_holder,
-					BackgroundTransparency = 1,
-					Name = "\0",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					Visible = false,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-			
-				cfg["holder"] = section_holder
-				local tab_scale = library:create("UIScale", {Parent = section_holder, Scale = 1})
-
-				library:create("UIListLayout", {
-					Parent = section_holder,
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					Padding = dim(0, 4),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			-- 
-
-			function cfg.open_tab()
-				if library.current_tab and library.current_tab[1] ~= background then 
-					local button = library.current_tab[1]
-					button.Size = dim2(1, -2, 1, -1)
-					button:FindFirstChildOfClass("UIGradient").Rotation = 90
-					button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.text
-						
-					library.current_tab[2].Visible = false
-					
-					library.current_tab = nil
-				end
-				
-				library.current_tab = {
-					background, section_holder
-				}
-				
-				local button = library.current_tab[1] 
-				button.Size = dim2(1, -2, 1, 0) -- ENABLED
-				button:FindFirstChildOfClass("UIGradient").Rotation = -90
-				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent 
-
-				library.current_tab[2].Visible = true 
-				tab_scale.Scale = 0.985
-				library:tween(tab_scale, {Scale = 1})
-
-				if library.current_element_open and library.current_element_open ~= cfg then 
-					library.current_element_open.set_visible(false)
-					library.current_element_open.open = false 
-					library.current_element_open = nil 
-				end
-			end
-			
-			tab_holder.MouseButton1Click:Connect(cfg.open_tab)
-			
-			return setmetatable(cfg, library) 
+	local dragging = false
+	track.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			local m = UIS:GetMouseLocation()
+			local a = math.clamp((m.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+			setVal(min + (max - min) * a)
 		end
-
-		function library:column(path) 
-			local cfg = {}
-			
-			local holder = path or self.holder
-			
-			local column = library:create("Frame", {
-				Parent = holder,
-				BackgroundTransparency = 1,
-				Name = "\0",
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(column, "inline", "BackgroundColor3") 
-			
-			library:create("UIListLayout", {
-				Parent = column,
-				Padding = dim(0, 4),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				VerticalFlex = Enum.UIFlexAlignment.Fill
-			})
-			
-			cfg["holder"] = column
-
-			return setmetatable(cfg, library) 
+	end)
+	UIS.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local m = UIS:GetMouseLocation()
+			local a = math.clamp((m.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+			setVal(min + (max - min) * a)
 		end
-
-		function library:multi_section(options)
-			local cfg = {
-				names = options.names or {"First", "Second", "Third"}, 
-				sections = {},
-			}
-
-			local section = library:create("Frame", {
-				Parent = self.holder,
-				Name = "",
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(section, "inline", "BackgroundColor3")
-			
-			local inline = library:create("Frame", {
-				Parent = section,
-				Name = "",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.outline
-			}) library:apply_theme(inline, "outline", "BackgroundColor3") 
-			
-			local __background = library:create("Frame", {
-				Parent = inline,
-				Name = "",
-				ClipsDescendants = true,
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				ZIndex = 1,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local accent = library:create("Frame", {
-				Parent = __background,
-				Name = "",
-				Size = dim2(1, 0, 0, 2),
-				BorderColor3 = rgb(0, 0, 0),
-				ZIndex = 3,
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.accent
-			}) library:apply_theme(accent, "accent", "BackgroundColor3")
-			
-			local UIGradient = library:create("UIGradient", {
-				Parent = accent,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{rgbkey(0, rgb(255, 255, 255)), rgbkey(1, rgb(167, 167, 167))}
-			}) 
-			
-			local UIGradient = library:create("UIGradient", {
-				Parent = __background,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{rgbkey(0, rgb(41, 41, 55)), rgbkey(1, rgb(35, 35, 47))}
-			}) library:apply_theme(UIGradient, "contrast", "Color") 
-			
-			local tab_holder = library:create("Frame", {
-				Parent = __background,
-				Name = "",
-				ClipsDescendants = true,
-				BackgroundTransparency = 1,
-				Position = dim2(0, -1, 0, 0),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 2, 0, 21),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			}) 
-			
-			library:create("UIListLayout", {
-				Parent = tab_holder,
-				Name = "",
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalFlex = Enum.UIFlexAlignment.Fill,
-				Padding = dim(0, -3),
-				SortOrder = Enum.SortOrder.LayoutOrder
-			})
-			
-			for _, tab in next, cfg.names do 
-				local multi = {
-					open = false, 
-				} 
-
-				-- Tab
-					local tabb = library:create("TextButton", {
-						Parent = tab_holder,
-						Name = "",
-						AutoButtonColor = false,
-						FontFace = library.font,
-						TextColor3 = themes.preset.text,
-						BorderColor3 = rgb(0, 0, 0),
-						Text = "",
-						BorderSizePixel = 0,
-						Size = dim2(0, 0, 1, 0),
-						ZIndex = 1,
-						TextSize = 12,
-						BackgroundColor3 = themes.preset.outline
-					}) library:apply_theme(tabb, "outline", "BackgroundColor3") 
-					
-					local background = library:create("Frame", {
-						Parent = tabb,
-						Name = "",
-						Size = dim2(1, 0, 1, -2),
-						Position = dim2(0, 1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						ZIndex = 1,
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-					
-					local UIGradient = library:create("UIGradient", {
-						Parent = background,
-						Name = "",
-						Rotation = 90,
-						Color = rgbseq{rgbkey(0, rgb(41, 41, 55)), rgbkey(1, rgb(35, 35, 47))}
-					}) library:apply_theme(UIGradient, "contrast", "Color")
-					
-					local text = library:create("TextLabel", {
-						Parent = background,
-						Name = "",
-						FontFace = library.font,
-						TextColor3 = themes.preset.text,
-						BorderColor3 = rgb(0, 0, 0),
-						Text = tab,
-						BackgroundTransparency = 1,
-						Size = dim2(1, 0, 1, 0),
-						BorderSizePixel = 0,
-						AutomaticSize = Enum.AutomaticSize.X,
-						TextSize = 12,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) library:apply_theme(text, "accent", "TextColor3")
-					
-					local UIStroke = library:create("UIStroke", {
-						Parent = text,
-						Name = "",
-						LineJoinMode = Enum.LineJoinMode.Miter
-					})
-				-- 
-
-				-- Element Handler
-					local ScrollingFrame = library:create("ScrollingFrame", {
-						Parent = __background,
-						Name = "",
-						ScrollBarImageColor3 = themes.preset.accent,
-						Active = true,
-						MidImage = "rbxassetid://103468666327206",
-						TopImage = "rbxassetid://103468666327206",
-						BottomImage = "rbxassetid://103468666327206",
-						AutomaticCanvasSize = Enum.AutomaticSize.Y,
-						ScrollBarThickness = 2,
-						Size = dim2(1, 0, 1, -20),
-						Visible = false, 
-						BackgroundTransparency = 1,
-						Position = dim2(0, 0, 0, 24),
-						BackgroundColor3 = rgb(255, 255, 255),
-						BorderColor3 = rgb(0, 0, 0),
-						BorderSizePixel = 0,
-						ScrollBarThickness = 2,
-						CanvasSize = dim2(0, 0, 0, 0)
-					}) library:apply_theme(ScrollingFrame, "accent", "ScrollBarImageColor3") 
-					
-					local elements = library:create("Frame", {
-						Parent = ScrollingFrame,
-						Name = "",
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, 0, 0, 0),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) multi.holder = elements
-					
-					local UIListLayout = library:create("UIListLayout", {
-						Parent = elements,
-						Name = "",
-						SortOrder = Enum.SortOrder.LayoutOrder,
-						HorizontalAlignment = Enum.HorizontalAlignment.Center,
-						Padding = dim(0, 4)
-					})
-					
-					local UIPadding = library:create("UIPadding", {
-						Parent = ScrollingFrame,
-						Name = "",
-						PaddingBottom = dim(0, 60)
-					})
-				--
-				
-				function multi:open_tab(bool) 
-					ScrollingFrame.Visible = bool 
-					UIGradient.Rotation = bool and -90 or 90
-					tabb.Size = dim2(0, 0, 1, bool and 1 or 0)
-					text.TextColor3 = bool and themes.preset.accent or themes.preset.text
-				end
-
-				library:connection(tabb.MouseButton1Click, function()
-					for _, multi_s in next, cfg.sections do 
-						multi_s:open_tab(false)
-					end
-
-					if library.current_element_open then 
-						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
-						library.current_element_open = nil 
-					end
-
-					multi:open_tab(true) 
-				end)
-
-				cfg.sections[#cfg.sections + 1] = setmetatable(multi, library)
-			end 
-
-			cfg.sections[1]:open_tab(true)
-
-			return unpack(cfg.sections)
-		end 
-
-		function library:section(options)
-			local cfg = {
-				name = options.name or "Section", 
-			}
-			
-			local section = library:create("Frame", {
-				Parent = self.holder,
-				Name = "\0",
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(section, "inline", "BackgroundColor3") 
-
-			local inline = library:create("Frame", {
-				Parent = section,
-				Name = "\0",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.outline
-			}) library:apply_theme(inline, "outline", "BackgroundColor3") 
-
-			local background = library:create("Frame", {
-				Parent = inline,
-				Name = "\0",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-
-			local text = library:create("TextLabel", {
-				Parent = background,
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = cfg.name,
-				Name = "\0",
-				BackgroundTransparency = 1,
-				Position = dim2(0, 6, 0, 4),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.XY,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-
-			library:create("UIStroke", {
-				Parent = text,
-				LineJoinMode = Enum.LineJoinMode.Miter
-			})
-
-			local accent = library:create("Frame", {
-				Parent = background,
-				Name = "\0",
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 0, 2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.accent
-			}) library:apply_theme(accent, "accent", "BackgroundColor3") 
-
-			local UIGradient = library:create("UIGradient", {
-				Parent = accent,
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(255, 255, 255)),
-					rgbkey(1, rgb(167, 167, 167))
-				}
-			})
-
-			local UIGradient = library:create("UIGradient", {
-				Parent = background,
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-			}) library:apply_theme(UIGradient, "contrast", "Color") 
-
-			local ScrollingFrame = library:create("ScrollingFrame", {
-				Parent = background,
-				ScrollBarImageColor3 = themes.preset.accent,
-				Active = true,
-				AutomaticCanvasSize = Enum.AutomaticSize.Y,
-				ScrollBarThickness = 2,
-				MidImage = "rbxassetid://103468666327206",
-				TopImage = "rbxassetid://103468666327206",
-				BottomImage = "rbxassetid://103468666327206",
-				Size = dim2(1, 0, 1, -20),
-				BackgroundTransparency = 1,
-				Position = dim2(0, 0, 0, 20),
-				BackgroundColor3 = rgb(255, 255, 255),
-				BorderColor3 = rgb(0, 0, 0),
-				BorderSizePixel = 0,
-				CanvasSize = dim2(0, 0, 0, 0)
-			}) library:apply_theme(ScrollingFrame, "accent", "ScrollBarImageColor3") 
-
-			ScrollingFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-				if library.current_element_open then 
-					library.current_element_open.set_visible(false)
-					library.current_element_open.open = false 
-					library.current_element_open = nil
-				end
-			end) 
-
-			local elements = library:create("Frame", {
-				Parent = ScrollingFrame,
-				Name = "\0",
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 0, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			cfg.holder = elements 
-
-			library:create("UIListLayout", {
-				Parent = elements,
-				Padding = dim(0, 4),
-				HorizontalAlignment = Enum.HorizontalAlignment.Center,
-				SortOrder = Enum.SortOrder.LayoutOrder
-			})
-
-			library:create("UIPadding", {
-				Parent = ScrollingFrame,
-				PaddingBottom = dim(0, 10)
-			})
-
-			return setmetatable(cfg, library)
+	end)
+	UIS.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
 		end
+	end)
 
-		function library:slider(options)
-			local cfg = {
-				name = options.name or nil,
-				suffix = options.suffix or "",
-				flag = options.flag or tostring(2^789),
-				callback = options.callback or function() end, 
-				visible = options.visible or true, 
-				input_disabled = options.input or false,
-				custom_color = options.custom or nil; 
+	return {Set = setVal, Get = function() return value end}
+end
 
-				min = options.min or options.minimum or 0,
-				max = options.max or options.maximum or 100,
-				intervals = options.interval or options.decimal or 1,
-				default = options.default or 10,
-
-				dragging = false,
-				value = options.default or 10, 
-			} 
-
-			-- instances 
-				local slider_REAL = library:create("TextLabel", {
-					Parent = self.holder, 
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					Name = "slider",
-					ZIndex = 1,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local TEXT_LABEL; 
-				if cfg.name then 
-					local left_components = library:create("Frame", {
-						Parent = slider_REAL,
-						Name = "left_components",
-						BackgroundTransparency = 1,
-						Position = dim2(0, 2, 0, -1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(0, 0, 0, 14),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-					
-					TEXT_LABEL = library:create("TextLabel", {
-						Parent = left_components,
-						FontFace = library.font,
-						TextColor3 = themes.preset.text,
-						BorderColor3 = rgb(0, 0, 0),
-						Text = cfg.name,
-						Name = "text",
-						BackgroundTransparency = 1,
-						Size = dim2(0, 0, 1, -1),
-						BorderSizePixel = 0,
-						AutomaticSize = Enum.AutomaticSize.X,
-						TextSize = 12,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}, "text")
-
-					library:create("UIListLayout", {
-						Parent = left_components,
-						Padding = dim(0, 5),
-						Name = "_",
-						FillDirection = Enum.FillDirection.Horizontal
-					})
-				end 
-				
-				local bottom_components = library:create("Frame", {
-					Parent = slider_REAL,
-					Name = "bottom_components",
-					Position = dim2(0, 0, 0, cfg.name and 15 or 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local slider = library:create("TextButton", {
-					Parent = bottom_components,
-					Name = "slider",
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -1, 1, 12),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline,
-					Text = "",
-					AutoButtonColor = false,
-				}) library:apply_theme(slider, "outline", "BackgroundColor3") 
-
-				if not cfg.input_disabled then 
-					library:hoverify(slider_REAL, slider)
-				end
-
-				local inline = library:create("Frame", {
-					Parent = slider,
-					Name = "inline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					ZIndex = 1;
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "background",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-				}) 
-				
-				local contrast = library:create("Frame", {
-					Parent = background,
-					Name = "contrast",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local slidertext = library:create("TextLabel", {
-					Parent = contrast,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "12.50/100.00",
-					Name = "text",
-					BackgroundTransparency = 1,
-					Position = dim2(0, 0, 0, -1),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					TextSize = 12,
-					ZIndex = 2,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local fill = library:create("Frame", {
-					Parent = contrast,
-					Name = "fill",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = cfg.custom_color or themes.preset.accent
-				}) if not cfg.custom_color then library:apply_theme(fill, "accent", "BackgroundColor3") end; 
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = fill,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = contrast,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}); library:apply_theme(UIGradient, "contrast", "Color")
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-				
-				library:create("UIListLayout", {
-					Parent = bottom_components,
-					Padding = dim(0, 10),
-					Name = "_",
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			--  
-
-			function cfg.set(value)
-				if type(value) == "userdata" then 
-					return 
-				end
-
-				cfg.value = math.clamp(library:round(value, cfg.intervals), cfg.min, cfg.max)
-
-				fill.Size = dim2((cfg.value - cfg.min) / (cfg.max - cfg.min), 0, 1, 0)
-				slidertext.Text = tostring(cfg.value) .. cfg.suffix .. "/" .. tostring(cfg.max) .. cfg.suffix
-				flags[cfg.flag] = cfg.value
-
-				cfg.callback(flags[cfg.flag])
-			end
-
-			function cfg.set_element_visible(bool)
-				slider_REAL.Visible = bool 
-
-				if TEXT_LABEL then 
-					TEXT_LABEL.Visible = bool 
-				end 
-			end
-
-			if not cfg.input_disabled then 
-				library:connection(uis.InputChanged, function(input)
-					if cfg.dragging and input.UserInputType == Enum.UserInputType.MouseMovement then 
-						local size_x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
-						local value = ((cfg.max - cfg.min) * size_x) + cfg.min
-						cfg.set(value)
-					end
-				end)
-
-				library:connection(uis.InputEnded, function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 then
-						cfg.dragging = false 
-					end 
-				end)
-
-				slider.MouseButton1Down:Connect(function()
-					cfg.dragging = true
-				end)
-			end
-
-			if cfg.tooltip then 
-				library:tool_tip({name = cfg.tooltip, path = slider_REAL})
-			end
-
-			cfg.set(cfg.default)
-			cfg.set_element_visible(cfg.visible)
-					
-			config_flags[cfg.flag] = cfg.set
-
-			library.config_flags[cfg.flag] = cfg.set
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-
-			return setmetatable(cfg, library) 
-		end 
-
-		function library:toggle(options)
-			local cfg = {
-				enabled = options.enabled or nil,
-				name = options.name or "Toggle",
-				flag = options.flag or tostring(random(1,9999999)),
-				callback = options.callback or function() end,
-				default = options.default or false,
-				colorpicker = options.color or nil,
-				visible = options.visible or true,
-				tooltip = options.tooltip or nil,
-			}
-
-			-- instances
-				local toggle_holder = library:create("TextButton", {
-					Parent = self.holder,
-					FontFace = library.font,
-					TextColor3 = rgb(151, 151, 151),
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					Name = "toggle",
-					ZIndex = 1,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local right_components = library:create("Frame", {
-					Parent = toggle_holder,
-					Name = "right_components",
-					Position = dim2(1, -1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 0, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				cfg["right_holder"] = right_components
-			
-				local list = library:create("UIListLayout", {
-					Parent = right_components,
-					VerticalAlignment = Enum.VerticalAlignment.Center,
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalAlignment = Enum.HorizontalAlignment.Right,
-					Padding = dim(0, 4),
-					Name = "list",
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			
-				library:create("UIPadding", {
-					Parent = toggle_holder
-				})
-			
-				local left_components = library:create("Frame", {
-					Parent = toggle_holder,
-					Name = "left_components",
-					BackgroundTransparency = 1,
-					Position = dim2(0, 0, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 0, 0, 14),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local text = library:create("TextLabel", {
-					Parent = left_components,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = cfg.name,
-					Name = "text",
-					BackgroundTransparency = 1,
-					Size = dim2(0, 0, 1, -1),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.X,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-			
-				library:create("UIStroke", {
-					Parent = text,
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-			
-				library:create("UIListLayout", {
-					Parent = left_components,
-					Padding = dim(0, 5),
-					Name = "_",
-					FillDirection = Enum.FillDirection.Horizontal
-				})
-			
-				local toggle = library:create("TextButton", {
-					Parent = left_components,
-					Name = "!toggle",
-					Text = "",
-					AutoButtonColor = false,
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 14, 0, 14),
-					BorderSizePixel = 0,
-					ZIndex = 1, 
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(toggle, "outline", "BackgroundColor3") 
-				library:apply_theme(toggle, "accent", "BackgroundColor3") 
-
-				local inline = library:create("Frame", {
-					Parent = toggle,
-					Name = "inline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					ZIndex = 2;
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-			
-				local accent = library:create("Frame", {
-					Parent = inline,
-					BackgroundTransparency = 1;
-					ZIndex = 3;
-					Name = "background",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				})
-				library:apply_theme(accent, "accent", "BackgroundColor3") 
-
-				local UIGradient = library:create("UIGradient", {
-					Parent = accent,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-
-				local background = library:create("Frame", {
-					Parent = inline,
-					ZIndex = 2;
-					Name = "background",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				library:apply_theme(background, "accent", "BackgroundColor3") 
-
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Name = "_",
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-			--  
-
-			library:hoverify(toggle_holder, toggle)
-
-			function cfg.set(bool)
-				library:tween(accent, {BackgroundTransparency = bool and 0 or 1})
-				flags[cfg.flag] = bool
-				
-				cfg.callback(bool)
-			end
-
-			function cfg.set_element_visible(bool)
-				toggle_holder.Visible = bool 
-			end 
-		
-			library:connection(toggle_holder.MouseButton1Click, function()
-				cfg.enabled = not cfg.enabled
-		
-				cfg.set(cfg.enabled)
-			end)
-
-			library:connection(toggle.MouseButton1Click, function()
-				cfg.enabled = not cfg.enabled
-		
-				cfg.set(cfg.enabled)
-			end)
-
-			if cfg.tooltip then 
-				library:tool_tip({name = cfg.tooltip, path = toggle_holder})
-			end
-
-			cfg.set(cfg.default)
-			
-			cfg.set_element_visible(cfg.visible)
-			
-			library.config_flags[cfg.flag] = cfg.set
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-
-			return setmetatable(cfg, library)
+-- button — hover + click flash
+function library:Button(cfg)
+	cfg = cfg or {}
+	local r = mk("TextButton", {
+		Parent = self._List, Text = "", AutoButtonColor = false,
+		Size = UDim2.new(1, 0, 0, 32),
+		BackgroundColor3 = T.Card, BorderSizePixel = 0,
+	}, 8)
+	mk("TextLabel", {
+		Parent = r, Text = cfg.Name or "Button",
+		Font = Enum.Font.Gotham, TextSize = 13, TextColor3 = T.Text,
+		BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+	})
+	r.MouseEnter:Connect(function()
+		tween(r, {BackgroundColor3 = T.CardHover})
+	end)
+	r.MouseLeave:Connect(function()
+		tween(r, {BackgroundColor3 = T.Card})
+	end)
+	r.MouseButton1Click:Connect(function()
+		tween(r, {BackgroundColor3 = T.Accent})
+		task.delay(0.15, function()
+			tween(r, {BackgroundColor3 = T.Card})
+		end)
+		if cfg.Callback then
+			cfg.Callback()
 		end
-		
-		function library:colorpicker(options)
-			local parent = self.right_holder
-			
-			local cfg = {
-				name = options.name or "Color", 
-				flag = options.flag or tostring(2^789),
-				color = options.color or color(1, 1, 1), -- Default to white color if not provided
-				alpha = options.alpha or 1,
-				callback = options.callback or function() end,
-				right_holder = self.right_holder,
-			}
+	end)
+	return r
+end
 
-			local dragging_sat = false 
-			local dragging_hue = false 
-			local dragging_alpha = false 
+-- dropdown — animated CanvasGroup popup list
+function library:Dropdown(cfg)
+	cfg = cfg or {}
+	local items = cfg.Items or {}
+	local selected = cfg.Default or (items[1] or "Select...")
 
-			local h, s, v = cfg.color:ToHSV() 
-			local a = cfg.alpha 
-			
-			-- colorpicker button 
-				local colorpicker_button = library:create("TextButton", {
-					Parent = parent,
-					Name = "outline",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 24, 0, 14),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline,
-					Text = "",
-					AutoButtonColor = false,
-				}) library:apply_theme(colorpicker_button, "outline", "BackgroundColor3") 
-			
-				local inline = library:create("Frame", {
-					Parent = colorpicker_button,
-					Name = "inline",
-					ZIndex = 2;
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-			
-				local handler = library:create("Frame", {
-					Parent = inline,
-					Name = "handler",
-					ZIndex = 2;
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(250, 165, 27)
-				})
+	local r = row(self._List, 34)
+	mk("TextLabel", {
+		Parent = r, Text = cfg.Name or "Dropdown",
+		Font = Enum.Font.Gotham, TextSize = 13, TextColor3 = T.Text,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -150, 1, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	local sel = mk("TextLabel", {
+		Parent = r, Text = tostring(selected), Font = Enum.Font.Gotham, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -34, 0.5, 0), Size = UDim2.new(0, 90, 0, 14),
+		TextXAlignment = Enum.TextXAlignment.Right,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	local chev = mk("TextLabel", {
+		Parent = r, Text = "▾", Font = Enum.Font.GothamBold, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(16, 14),
+	})
 
-				library:hoverify(colorpicker_button, colorpicker_button)
-			
-				local UIGradient = library:create("UIGradient", {
-					Parent = handler,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				})
-			-- 
+	local popup = mk("CanvasGroup", {
+		Parent = self._Gui, Size = UDim2.fromOffset(200, #items * 28 + 8),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+		Visible = false, GroupTransparency = 1, ZIndex = 50,
+	}, 8, true)
+	local psc = mk("UIScale", {Parent = popup, Scale = 0.94})
 
-			-- colorpicker instances
-				local colorpicker_holder = library:create("CanvasGroup", {
-					Parent = sgui,
-					Name = "colorpicker",
-					Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 190, 0, 210),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline,
-					Visible = false,
-					ZIndex = 1,
-					GroupTransparency = 1
-				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
-			library:create("UIScale", {Parent = colorpicker_holder, Scale = 1})
-
-				library:make_resizable(colorpicker_holder)
-				
-				local window_inline = library:create("Frame", {
-					Parent = colorpicker_holder,
-					Name = "window_inline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				}) library:apply_theme(window_inline, "accent", "BackgroundColor3") 
-				
-				local window_holder = library:create("Frame", {
-					Parent = window_inline,
-					Name = "window_holder",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = themes.preset.outline,
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local UIGradient = library:create("UIGradient", {
-					Parent = window_holder,
-					Rotation = 90,
-					Name = "_",
-					Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local text = library:create("TextLabel", {
-					Parent = window_holder,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = cfg.name,
-					Name = "text",
-					BackgroundTransparency = 1,
-					Position = dim2(0, 2, 0, 4),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.XY,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = text,
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				library:create("UIPadding", {
-					Parent = window_holder,
-					Name = "_",
-					PaddingBottom = dim(0, 4),
-					PaddingRight = dim(0, 4),
-					PaddingLeft = dim(0, 4)
-				})
-				
-				local main_holder = library:create("Frame", {
-					Parent = window_holder,
-					Name = "main_holder",
-					Position = dim2(0, 0, 0, 20),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, -40),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(main_holder, "inline", "BackgroundColor3") 
-				
-				cfg.holder = library:create( "Frame" , {
-					Parent = colorpicker_holder;
-					Name = "\0";
-					Position = dim2(0, 6, 1, -21);
-					BorderColor3 = rgb(0, 0, 0);
-					Size = dim2(1, -120, 0, 0);
-					BorderSizePixel = 0;
-				});
-				
-				local RainbowToggle = setmetatable(cfg, library):toggle({name = "Rainbow", flag = cfg.flag .. "_RAINBOW_FLAG"})
-
-				cfg.holder = library:create( "Frame" , {
-					Parent = colorpicker_holder;
-					Name = "\0";
-					Position = dim2(1, 2, 1, -23);
-					BorderColor3 = rgb(0, 0, 0);
-					AnchorPoint = vec2(1, 0);
-					Size = dim2(1, -80, 0, 0);
-					BorderSizePixel = 0;
-				});
-				
-				local section = setmetatable(cfg, library)
-				section:button_holder({})
-				section:button({name = "Copy", callback = function()
-					library.copied_flag = flags[cfg.flag]
-					library.is_rainbow = cfg.flag .. "_RAINBOW_FLAG"
-				end})
-				section:button({name = "Paste", callback = function()
-					RainbowToggle.set(library.is_rainbow)
-					cfg.set(library.copied_flag.Color, library.copied_flag.Transparency)
-				end})
-
-				local main_holder_inline = library:create("Frame", {
-					Parent = main_holder,
-					Name = "main_holder_inline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(main_holder_inline, "outline", "BackgroundColor3") 
-				
-				local main_holder_background = library:create("Frame", {
-					Parent = main_holder_inline,
-					Name = "main_holder_background",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = main_holder_background,
-					Rotation = 90,
-					Name = "_",
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				library:create("UIPadding", {
-					Parent = main_holder_background,
-					PaddingTop = dim(0, 4),
-					Name = "_",
-					PaddingBottom = dim(0, 4),
-					PaddingRight = dim(0, 4),
-					PaddingLeft = dim(0, 4)
-				})
-				
-				local alpha = library:create("TextButton", {
-					Parent = main_holder_background,
-					AnchorPoint = vec2(0, 0.5),
-					Name = "alpha",
-					Position = dim2(0, 0, 1, -8),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -20, 0, 14),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline,
-					Text = "",
-					AutoButtonColor = false,
-				}) library:apply_theme(alpha, "inline", "BackgroundColor3") 
-				
-				local outline = library:create("Frame", {
-					Parent = alpha,
-					Name = "outline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(outline, "outline", "BackgroundColor3") 
-				
-				local alpha_drag = library:create("Frame", {
-					Parent = outline,
-					Name = "alpha_drag",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(0, 221, 255)
-				})
-				
-				local alphaind = library:create("ImageLabel", {
-					Parent = alpha_drag,
-					ScaleType = Enum.ScaleType.Tile,
-					BorderColor3 = rgb(0, 0, 0),
-					Image = "rbxassetid://18274452449",
-					BackgroundTransparency = 1,
-					Name = "alphaind",
-					Size = dim2(1, 0, 1, 0),
-					TileSize = dim2(0, 6, 0, 6),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = alphaind,
-					Transparency = numseq{
-						numkey(0, 0),
-						numkey(1, 1)
-					}
-				})
-				
-				local alpha_picker = library:create("Frame", {
-					Parent = alpha_drag,
-					Name = "alpha_picker",
-					BorderMode = Enum.BorderMode.Inset,
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 4, 1, 0),
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local hue = library:create("TextButton", {
-					Parent = main_holder_background,
-					AnchorPoint = vec2(1, 0),
-					Name = "hue",
-					Position = dim2(1, -1, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 14, 1, -20),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline,
-					Text = "",
-					AutoButtonColor = false
-				})
-				
-				local outline = library:create("Frame", {
-					Parent = hue,
-					Name = "outline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				})
-				
-				local Frame = library:create("Frame", {
-					Parent = outline,
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = Frame,
-					Rotation = 270,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 0, 0)),
-						rgbkey(0.17000000178813934, rgb(255, 255, 0)),
-						rgbkey(0.33000001311302185, rgb(0, 255, 0)),
-						rgbkey(0.5, rgb(0, 255, 255)),
-						rgbkey(0.6700000166893005, rgb(0, 0, 255)),
-						rgbkey(0.8299999833106995, rgb(255, 0, 255)),
-						rgbkey(1, rgb(255, 0, 0))
-					}
-				}) 
-				
-				local hue_picker = library:create("Frame", {
-					Parent = Frame,
-					Name = "hue_picker",
-					BorderMode = Enum.BorderMode.Inset,
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 0, 4),
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local visualize = library:create("Frame", {
-					Parent = main_holder_background,
-					AnchorPoint = vec2(1, 1),
-					Name = "visualize",
-					Position = dim2(1, -1, 1, -1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 14, 0, 14),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(visualize, "inline", "BackgroundColor3") 
-				
-				local outline = library:create("Frame", {
-					Parent = visualize,
-					Size = dim2(1, -2, 1, -2),
-					Name = "outline",
-					Active = true,
-					BorderColor3 = rgb(0, 0, 0),
-					Position = dim2(0, 1, 0, 1),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(outline, "outline", "BackgroundColor3") 
-				
-				local visualize = library:create("Frame", {
-					Parent = outline,
-					Size = dim2(1, -2, 1, -2),
-					Name = "visualize",
-					Active = true,
-					BorderColor3 = rgb(0, 0, 0),
-					Position = dim2(0, 1, 0, 1),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(0, 221, 255)
-				})
-				
-				local satval_picker = library:create("Frame", {
-					Parent = main_holder_background,
-					Name = "satval_picker",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -20, 1, -20),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(satval_picker, "inline", "BackgroundColor3") 
-				
-				local outline = library:create("Frame", {
-					Parent = satval_picker,
-					Name = "outline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(outline, "outline", "BackgroundColor3") 
-				
-				local colorpicker = library:create("Frame", {
-					Parent = outline,
-					Name = "colorpicker",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(0, 221, 255)
-				})
-				
-				local sat = library:create("TextButton", {
-					Parent = colorpicker,
-					Name = "sat",
-					Size = dim2(1, 0, 1, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 2,
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255),
-					Text = "",
-					AutoButtonColor = false,
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = sat,
-					Rotation = 270,
-					Transparency = numseq{
-						numkey(0, 0),
-						numkey(1, 1)
-					},
-					Color = rgbseq{
-						rgbkey(0, rgb(0, 0, 0)),
-						rgbkey(1, rgb(0, 0, 0))
-					}
-				})
-				
-				local val = library:create("TextButton", {
-					Parent = colorpicker,
-					Name = "val",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255),
-					Text = "",
-					AutoButtonColor = false,
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = val,
-					Transparency = numseq{
-						numkey(0, 0),
-						numkey(1, 1)
-					}
-				})
-				
-				local satval_picker_REAL = library:create("Frame", {
-					Parent = colorpicker,
-					Name = "satval_picker_REAL",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 2, 0, 2),
-					BorderSizePixel = 1,
-					BackgroundColor3 = rgb(255, 255, 255),
-					ZIndex = 3, 
-				})
-			-- 
-				
-			function cfg.set_visible(bool)
-				if bool then 
-					if library.current_element_open and library.current_element_open ~= cfg then 
-						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
-					end
-
-					library.current_element_open = cfg
-					colorpicker_holder.Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17)
-					colorpicker_holder:SetAttribute("open", true)
-					library:popup_animate(colorpicker_holder, true)
-				else
-					colorpicker_holder:SetAttribute("open", false)
-					library:popup_animate(colorpicker_holder, false)
-				end
-			end 
-
-			colorpicker_button.MouseButton1Click:Connect(function()		
-				cfg.open = not cfg.open
-
-				cfg.set_visible(cfg.open) 
-			end)
-
-			function cfg.set(color, alpha)
-				if color then 
-					h, s, v = color:ToHSV()
-				end 
-			
-				if alpha then 
-					a = alpha
-				end 
-			
-				local hsv_position = Color3.fromHSV(h, s, v)
-				local Color = Color3.fromHSV(h, s, v)
-				
-				local value = 1 - h
-				local offset = (value < 1) and 0 or -4
-				hue_picker.Position = dim2(0, 0, value, offset)
-
-				local offset = (a < 1) and 0 or -4
-				alpha_picker.Position = dim2(a, offset, 0, 0)
-
-				alpha_drag.BackgroundColor3 = Color3.fromHSV(h, s, v)
-				
-				visualize.BackgroundColor3 = Color
-				handler.BackgroundColor3 = Color 
-
-				colorpicker.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-				
-				cfg.color = Color
-				cfg.alpha = a
-				
-				local s_offset = (s < 1) and 0 or -3
-				local v_offset = (1 - v < 1) and 0 or -3
-				satval_picker_REAL.Position = dim2(s, s_offset, 1 - v, v_offset)
-
-				flags[cfg.flag] = {} 
-				flags[cfg.flag]["Color"] = Color
-				flags[cfg.flag]["Transparency"] = a
-			
-				cfg.callback(Color, a)
-			end
-
-			function cfg.update_color() 
-				local mouse = uis:GetMouseLocation() 
-
-				if dragging_sat then	
-					s = math.clamp((vec2(mouse.X, mouse.Y - gui_offset) - val.AbsolutePosition).X / val.AbsoluteSize.X, 0, 1)
-					v = 1 - math.clamp((vec2(mouse.X, mouse.Y - gui_offset) - sat.AbsolutePosition).Y / sat.AbsoluteSize.Y, 0, 1)
-				elseif dragging_hue then 
-					h = math.clamp(1 - (vec2(mouse.X, mouse.Y - gui_offset) - hue.AbsolutePosition).Y / hue.AbsoluteSize.Y, 0, 1)
-				elseif dragging_alpha then 
-					a = math.clamp((vec2(mouse.X, mouse.Y - gui_offset) - alpha.AbsolutePosition).X / alpha.AbsoluteSize.X, 0, 1)
-				end
-
-				cfg.set(nil, nil)
-			end
-			
-			alpha.MouseButton1Down:Connect(function()
-				dragging_alpha = true 
-			end)
-
-			hue.MouseButton1Down:Connect(function()
-				dragging_hue = true 
-			end)
-
-			sat.MouseButton1Down:Connect(function()
-				dragging_sat = true  
-			end)
-
-			uis.InputEnded:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					dragging_sat = false
-					dragging_hue = false
-					dragging_alpha = false 
+	local open = false
+	local function setOpen(v)
+		open = v
+		if v then
+			popup.Size = UDim2.fromOffset(r.AbsoluteSize.X, #items * 28 + 8)
+			popup.Position = UDim2.fromOffset(r.AbsolutePosition.X, r.AbsolutePosition.Y + r.AbsoluteSize.Y + 4)
+			popup.Visible = true
+			popup.GroupTransparency = 1
+			psc.Scale = 0.95
+			tween(popup, {GroupTransparency = 0})
+			tween(psc, {Scale = 1})
+			tween(chev, {Rotation = 180})
+		else
+			tween(popup, {GroupTransparency = 1})
+			tween(psc, {Scale = 0.95})
+			tween(chev, {Rotation = 0})
+			task.delay(0.2, function()
+				if not open then
+					popup.Visible = false
 				end
 			end)
-
-			uis.InputChanged:Connect(function(input)
-				if (dragging_sat or dragging_hue or dragging_alpha) and input.UserInputType == Enum.UserInputType.MouseMovement then
-					cfg.update_color() 
-				end
-			end)	
-
-			task.spawn(function()
-				while true do 
-					task.wait()
-					if flags[cfg.flag .. "_RAINBOW_FLAG"] then 
-						cfg.set(
-							hsv(math.abs(math.sin(tick())), 
-							s, 
-							v
-						), a) 
-					end     
-				end     
-			end)
-
-			cfg.set(cfg.color, cfg.alpha)
-
-			library.config_flags[cfg.flag] = cfg.set
-		
-			return setmetatable(cfg, library) 
 		end
-
-		function library:keybind(options)
-			local parent = self.right_holder
-
-			local cfg = {
-				flag = options.flag or "SET ME A FLAG NOWWW!!!!",
-				callback = options.callback or function() end,
-				open = false,
-				binding = nil, 
-				name = options.name or nil, 
-				ignore_key = options.ignore or false, 
-
-				key = options.key or nil, 
-				mode = options.mode or "toggle",
-				active = options.default or false, 
-
-				hold_instances = {},
-			}
-
-			flags[cfg.flag] = {} 
-			
-			local KEYBIND_ELEMENT;
-			if cfg.name then 
-				KEYBIND_ELEMENT = library:create("TextLabel", {
-					Parent = library.keybind_list,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "[ Hold ]  Fly - X",
-					Size = dim2(1, -5, 0, 18),
-					Visible = false, 
-					Position = dim2(0, 5, 0, -1),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextTruncate = Enum.TextTruncate.AtEnd,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextSize = 12,
-					BackgroundColor3 = themes.preset.text
-				}, "text")
-			end 
-
-			local element_outline = library:create("TextButton", {
-				Parent = parent,
-				Name = "",
-				BorderColor3 = rgb(0, 0, 0),
-				Text = "", 
-				Size = dim2(0, 24, 0, 14),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundColor3 = themes.preset.outline
-			}) library:apply_theme(element_outline, "outline", "BackgroundColor3")
-
-			library:create("UIPadding", {
-				Parent = element_outline,
-				PaddingRight = dim(0, 2),
-			})
-
-			local instance = library:hoverify(element_outline, element_outline)
-			instance.Size = dim2(1, 2, 1, 0)
-
-			local inline = library:create("Frame", {
-				Parent = element_outline,
-				Name = "",
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				AutomaticSize = Enum.AutomaticSize.X,
-				Size = dim2(1, -2, 1, -2),
-				ZIndex = 2;
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-
-			library:create("UIPadding", {
-				Parent = inline,
-				PaddingRight = dim(0, 2),
-			})
-			
-			local handler = library:create("Frame", {
-				Parent = inline,
-				Name = "",
-				ZIndex = 2;
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-
-			local UIGradient = library:create("UIGradient", {
-				Parent = handler,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-			}); library:apply_theme(UIGradient, "contrast", "Color") 
-			
-			local key_text = library:create("TextLabel", {
-				Parent = handler,
-				Name = "",
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				ZIndex = 2;
-				Text = "b",
-				Size = dim2(1, 0, 1, 0),
-				BackgroundTransparency = 1,
-				Position = dim2(0, 0, 0, -2),
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.XY,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-
-			library:create("UIPadding", {
-				Parent = key_text,
-				PaddingLeft = dim(0, 3),
-				PaddingRight = dim(0, 2),
-			})
-			
-			-- mode selector
-				local keybind_selector = library:create("CanvasGroup", {
-					Parent = sgui,
-					Name = "",
-					Position = dim2(0, element_outline.AbsolutePosition.X + 1, 0, element_outline.AbsolutePosition.Y + 17),
-					BorderColor3 = rgb(255, 255, 255),
-					BorderSizePixel = 2,
-					Visible = false, 
-					AutomaticSize = Enum.AutomaticSize.XY,
-					BackgroundColor3 = rgb(255, 255, 255),
-					GroupTransparency = 1
-				})
-			library:create("UIScale", {Parent = keybind_selector, Scale = 1})
-				
-				library:create("UIListLayout", {
-					Parent = keybind_selector,
-					Name = "",
-					SortOrder = Enum.SortOrder.LayoutOrder,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					Padding = dim(0, 2)
-				})
-				
-				local hold_button = library:create("TextButton", {
-					Parent = keybind_selector,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "hold",
-					BackgroundTransparency = 1,
-					AutomaticSize = Enum.AutomaticSize.XY,
-					BorderSizePixel = 0,
-					ZIndex = 2,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = hold_button,
-					Name = "",
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				library:create("UIPadding", {
-					Parent = keybind_selector,
-					Name = "",
-					PaddingTop = dim(0, 3),
-					PaddingBottom = dim(0, 5),
-					PaddingRight = dim(0, 5),
-					PaddingLeft = dim(0, 5)
-				})
-				
-				local toggle_button = library:create("TextButton", {
-					Parent = keybind_selector,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "toggle",
-					BackgroundTransparency = 1,
-					AutomaticSize = Enum.AutomaticSize.XY,
-					BorderSizePixel = 0,
-					ZIndex = 2,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = toggle_button,
-					Name = "",
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				local always_button = library:create("TextButton", {
-					Parent = keybind_selector,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "always",
-					BackgroundTransparency = 1,
-					AutomaticSize = Enum.AutomaticSize.XY,
-					BorderSizePixel = 0,
-					ZIndex = 2,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = always_button,
-					Name = "",
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = keybind_selector,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}); library:apply_theme(UIGradient, "contrast", "Color")
-				
-				local UIStroke = library:create("UIStroke", {
-					Parent = keybind_selector,
-					Name = "",
-					Color = themes.preset.inline,
-					LineJoinMode = Enum.LineJoinMode.Miter,
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-				})
-			-- 
-
-			-- init 
-				function cfg.set_visible(bool)
-					keybind_selector.Position = dim2(0, element_outline.AbsolutePosition.X + 1, 0, element_outline.AbsolutePosition.Y + 17)
-
-					if bool then 
-						if library.current_element_open and library.current_element_open ~= cfg then 
-							library.current_element_open.set_visible(false)
-							library.current_element_open.open = false 
-						end
-
-						library.current_element_open = cfg 
-						keybind_selector:SetAttribute("open", true)
-						library:popup_animate(keybind_selector, true)
-					else
-						keybind_selector:SetAttribute("open", false)
-						library:popup_animate(keybind_selector, false)
-					end
-				end 
-
-				function cfg.set_mode(mode) 
-					cfg.mode = mode 
-
-					if mode == "always" then
-						cfg.set(true)
-					elseif mode == "hold" then
-						cfg.set(false)
-					end
-
-					flags[cfg.flag]["mode"] = mode
-				end 
-
-				function cfg.set(input)
-					if type(input) == "boolean" then 
-						local __cached = input 
-
-						if cfg.mode == "always" then 
-							__cached = true 
-						end 
-
-						cfg.active = __cached 
-						flags[cfg.flag]["active"] = __cached 
-						cfg.callback(__cached)
-					elseif tostring(input):find("Enum") then 
-						input = input.Name == "Escape" and "none" or input
-						
-						cfg.key = input or "none"	
-
-						local _text = keys[cfg.key] or tostring(cfg.key):gsub("Enum.", "")
-						local _text2 = (tostring(_text):gsub("KeyCode.", ""):gsub("UserInputType.", "")) or "none"
-						cfg.key_name = _text2
-
-						flags[cfg.flag]["mode"] = cfg.mode 
-						flags[cfg.flag]["key"] = cfg.key 
-
-						key_text.Text = string.lower(_text2)
-
-						cfg.callback(cfg.active or false)
-					elseif find({"toggle", "hold", "always"}, input) then 
-						cfg.set_mode(input)
-
-						if input == "always" then 
-							cfg.active = true 
-						end 
-
-						cfg.callback(cfg.active or false)
-					elseif type(input) == "table" then 
-						input.key = type(input.key) == "string" and input.key ~= "none" and library:convert_enum(input.key) or input.key
-
-						input.key = input.key == Enum.KeyCode.Escape and "none" or input.key
-						cfg.key = input.key or "none"
-						
-						cfg.mode = input.mode or "toggle"
-
-						if input.active then
-							cfg.active = input.active
-						end
-
-						local text = tostring(cfg.key) ~= "Enums" and (keys[cfg.key] or tostring(cfg.key):gsub("Enum.", "")) or nil
-						local __text = text and (tostring(text):gsub("KeyCode.", ""):gsub("UserInputType.", ""))
-						
-						key_text.Text = string.lower(__text) or "none"
-						cfg.key_name = __text
-					end 
-
-					flags[cfg.flag] = {
-						mode = cfg.mode,
-						key = cfg.key, 
-						active = cfg.active
-					}
-					
-					if cfg.name then 
-						KEYBIND_ELEMENT.Visible = cfg.active
-
-						library:tween(KEYBIND_ELEMENT, {
-							TextTransparency = cfg.active and 0 or 1, 
-						}) 
-
-						library:tween(KEYBIND_ELEMENT:FindFirstChildOfClass("UIStroke"), {
-							Transparency = cfg.active and 0 or 1, 
-						}) 
-						
-						local text = tostring(cfg.key) ~= "Enums" and (keys[cfg.key] or tostring(cfg.key):gsub("Enum.", "")) or nil
-						local __text = text and (tostring(text):gsub("KeyCode.", ""):gsub("UserInputType.", ""))
-
-						if cfg.name then 
-							KEYBIND_ELEMENT.Text = "[ " .. string.upper(string.sub(cfg.mode, 1, 1)) .. string.sub(cfg.mode, 2) .. " ] " .. cfg.name .. " - " .. __text
-						end
-					end
-				end
-
-
-				-- ok bro its 30 april2025.. what is this code from october 2024 ðŸ’€ðŸ’€
-				hold_button.MouseButton1Click:Connect(function()
-					cfg.set_mode("hold") 
-					cfg.set_visible(false)
-					cfg.open = false 
-				end) 
-
-				toggle_button.MouseButton1Click:Connect(function()
-					cfg.set_mode("toggle") 
-					cfg.set_visible(false)
-					cfg.open = false 
-				end) 
-
-				always_button.MouseButton1Click:Connect(function()
-					cfg.set_mode("always") 
-					cfg.set_visible(false)
-					cfg.open = false 
-				end) 
-				
-				element_outline.MouseButton2Click:Connect(function()
-					cfg.open = not cfg.open 
-
-					cfg.set_visible(cfg.open)
-				end)
-
-				element_outline.MouseButton1Down:Connect(function()
-					task.wait()
-					key_text.Text = "none"	
-
-					if cfg.binding then return end 
-
-					cfg.binding = library:connection(uis.InputBegan, function(input, game_event)  
-						local selected_key = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or input.UserInputType
-
-						cfg.set(selected_key)
-
-						cfg.binding:Disconnect() 
-						cfg.binding = nil
-					end)
-				end)
-
-				library:connection(uis.InputBegan, function(input, game_event) 
-					local selected_key = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or input.UserInputType
-
-					if not game_event then 
-						if selected_key == cfg.key then 
-							if cfg.mode == "toggle" then 
-								cfg.active = not cfg.active
-								cfg.set(cfg.active)
-							elseif cfg.mode == "hold" then 
-								cfg.set(true)
-							end
-						end
-					end
-				end)
-
-				library:connection(uis.InputEnded, function(input, game_event) 
-					if game_event then 
-						return 
-					end 
-
-					local selected_key = input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode or input.UserInputType
-		
-					if selected_key == cfg.key then
-						if cfg.mode == "hold" then 
-							cfg.set(false)
-						end
-					end
-				end)
-		
-				cfg.set({mode = cfg.mode, active = cfg.active, key = cfg.key})
-		
-				library.config_flags[cfg.flag] = cfg.set
-			-- 
-			
-			library.config_flags[cfg.flag] = cfg.set
-
-			return setmetatable(cfg, library) 
-		end 
-
-		function library:dropdown(options)
-			local parent = self.holder 
-
-			local cfg = {
-				name = options.name or nil,
-				flag = options.flag or tostring(random(1,9999999)),
-
-				items = options.items or {"1", "2", "3"},
-				callback = options.callback or function() end,
-				multi = options.multi or false, 
-				visible = options.visible or true,
-
-				open = false, 
-				option_instances = {}, 
-				multi_items = {}, 
-				scrolling = options.scrolling or false, 
-				ignore = options.ignore or nil,
-			}
-
-			cfg.default = options.default or (cfg.multi and {cfg.items[1]}) or cfg.items[1] or nil
-
-			-- dropdown elements
-				local dropdown_REAL = library:create("TextLabel", {
-					Parent = parent,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					Name = "dropdown",
-					ZIndex = 2,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local main_text      
-				if cfg.name then 
-					local left_components = library:create("Frame", {
-						Parent = dropdown_REAL,
-						Name = "left_components",
-						BackgroundTransparency = 1,
-						Position = dim2(0, 2, 0, -1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(0, 0, 0, 14),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-
-					main_text = library:create("TextLabel", {
-						Parent = left_components,
-						FontFace = library.font,
-						TextColor3 = themes.preset.text,
-						BorderColor3 = rgb(0, 0, 0),
-						Text = cfg.name,
-						Name = "text",
-						BackgroundTransparency = 1,
-						Size = dim2(0, 0, 1, -1),
-						BorderSizePixel = 0,
-						AutomaticSize = Enum.AutomaticSize.X,
-						TextSize = 12,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-					
-					library:create("UIStroke", {
-						Parent = main_text,
-						LineJoinMode = Enum.LineJoinMode.Miter
-					})
-					
-					library:create("UIListLayout", {
-						Parent = left_components,
-						Padding = dim(0, 5),
-						Name = "_",
-						FillDirection = Enum.FillDirection.Horizontal
-					})
-
-					local right_components = library:create("Frame", {
-						Parent = dropdown_REAL,
-						Name = "right_components",
-						Position = dim2(1, -1, 0, 1),
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(0, 0, 0, 12),
-						BorderSizePixel = 0,
-						BackgroundColor3 = rgb(255, 255, 255)
-					})
-					cfg["right_holder"] = right_components
-		
-					local list = library:create("UIListLayout", {
-						Parent = right_components,
-						VerticalAlignment = Enum.VerticalAlignment.Center,
-						FillDirection = Enum.FillDirection.Horizontal,
-						HorizontalAlignment = Enum.HorizontalAlignment.Right,
-						Padding = dim(0, 4),
-						Name = "list",
-						SortOrder = Enum.SortOrder.LayoutOrder
-					})
-				end 
-
-				local bottom_components = library:create("Frame", {
-					Parent = dropdown_REAL,
-					Name = "bottom_components",
-					Position = dim2(0, 0, 0, cfg.name and 15 or 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 26, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local dropdown = library:create("TextButton", {
-					Parent = bottom_components,
-					Name = "dropdown",
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -27, 1, 18),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline,
-					Text = "",
-					AutoButtonColor = false, 
-				}) library:apply_theme(dropdown, "outline", "BackgroundColor3") 
-				
-				library:hoverify(dropdown_REAL, dropdown)
-
-				local inline = library:create("Frame", {
-					Parent = dropdown,
-					Name = "inline",
-					ZIndex = 2;
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-				
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "background",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					ZIndex = 2;
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				}) library:apply_theme(background, "accent", "BackgroundColor3") 
-				
-				local contrast = library:create("Frame", {
-					Parent = background,
-					Name = "contrast",
-					ZIndex = 2;
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local plus = library:create("TextLabel", {
-					Parent = contrast,
-					TextWrapped = true,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 2;
-					Text = "+",
-					Name = "plus",
-					Size = dim2(1, -4, 1, 0),
-					Position = dim2(0, 0, 0, -1),
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Right,
-					FontFace = library.font,
-					TextTruncate = Enum.TextTruncate.AtEnd,
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = plus,
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				local text = library:create("TextLabel", {
-					Parent = contrast,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					ZIndex = 2;
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "aa",
-					Name = "text",
-					Size = dim2(1, -4, 1, 0),
-					Position = dim2(0, 4, 0, -1),
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BorderSizePixel = 0,
-					TextTruncate = Enum.TextTruncate.AtEnd,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = text,
-					LineJoinMode = Enum.LineJoinMode.Miter
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = contrast,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				library:create("UIListLayout", {
-					Parent = bottom_components,
-					Padding = dim(0, 10),
-					Name = "_",
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})     
-			--
-
-			-- dropdown holder
-				local dropdown_holder = library:create("CanvasGroup", {
-					Parent = sgui,
-					BorderColor3 = rgb(0, 0, 0),
-					Name = "dropdown_holder",
-					BackgroundTransparency = 1,
-					Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22),
-					Size = dim2(0, dropdown.AbsoluteSize.X, 0, cfg.scrolling and 180 or 0),
-					BorderSizePixel = 0,
-					AutomaticSize = cfg.scrolling and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
-					BackgroundColor3 = themes.preset.outline,
-					Visible = false,
-					GroupTransparency = 1
-				})
-				library:create("UIScale", {Parent = dropdown_holder, Scale = 1})
-				
-				local inline = library:create("Frame", {
-					Parent = dropdown_holder,
-					Size = dim2(1, -2, 1, 2),
-					Name = "inline",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 2,
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-				
-				local background; 
-				if not cfg.scrolling then 
-					background = library:create("Frame", {
-						Parent = inline,
-						BorderColor3 = rgb(0, 0, 0),
-						Name = "background",
-						BackgroundTransparency = 1,
-						Position = dim2(0, 1, 0, 1),
-						Size = dim2(1, -2, 1, 1),
-						ZIndex = 2,
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.accent
-					})
-					library:apply_theme(background, "accent", "BackgroundColor3") 
-				else 
-					background = library:create("ScrollingFrame", {
-						Parent = inline,
-						BorderColor3 = rgb(0, 0, 0),
-						Name = "background",
-						BackgroundTransparency = 1,
-						MidImage = "rbxassetid://103468666327206",
-						TopImage = "rbxassetid://103468666327206",
-						BottomImage = "rbxassetid://103468666327206",
-						Position = dim2(0, 1, 0, 1),
-						Size = dim2(1, -2, 1, 1),
-						ZIndex = 2,
-						BorderSizePixel = 0,
-						BackgroundColor3 = themes.preset.accent,
-						CanvasSize = dim2(0, 0, 0, 0),
-						AutomaticCanvasSize = Enum.AutomaticSize.Y,
-						ScrollBarThickness = 2,
-						ScrollBarImageColor3 = themes.preset.accent
-					})
-					library:apply_theme(background, "accent", "BackgroundColor3") 
-					library:apply_theme(background, "accent", "ScrollBarImageColor3") 
-				end 
-				
-				local contrast = library:create("Frame", {
-					Parent = background,
-					Name = "contrast",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, -3),
-					BorderSizePixel = 0,
-					ZIndex = 2, 
-					BackgroundColor3 = rgb(255, 255, 255),
-					AutomaticSize = cfg.scrolling and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
-				}); 
-
-				library:create("UIPadding", {
-					Parent = contrast,
-					PaddingTop = dim(0, 2),
-					PaddingBottom = dim(0, 2),
-					PaddingRight = dim(0, 0),
-					PaddingLeft = dim(0, 4)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = contrast,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-			
-				library:create("UIListLayout", {
-					Parent = contrast,
-					Padding = dim(0, 5),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local stroke = library:create("UIStroke", {
-					Parent = inline,
-					Color = themes.preset.outline,
-					LineJoinMode = Enum.LineJoinMode.Miter
-				}) library:apply_theme(stroke, "outline", "Color") 
-			-- 
-				
-			function cfg.set_element_visible(bool)
-				dropdown_REAL.Visible = bool 
-
-				if main_text then 
-					main_text.Visible = bool
-				end 
-			end 
-
-			function cfg.set_visible(bool) 
-				library.current_element_open = cfg.ignore or cfg
-
-				plus.Text = bool and "-" or "+"
-				plus.TextSize = bool and 12 or 8
-
-				if bool then 
-					if library.current_element_open and library.current_element_open ~= cfg and not cfg.ignore then 
-						library.current_element_open.set_visible(false)
-						library.current_element_open.open = false 
-					end
-
-					dropdown_holder.Size = dim2(0, dropdown.AbsoluteSize.X, 0, dropdown_holder.Size.Y.Offset)
-					dropdown_holder.Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22)
-					dropdown_holder:SetAttribute("open", true)
-					library:popup_animate(dropdown_holder, true)
-				else
-					dropdown_holder:SetAttribute("open", false)
-					library:popup_animate(dropdown_holder, false)
-				end
+	end
+
+	for i, item in ipairs(items) do
+		local b = mk("TextButton", {
+			Parent = popup, Text = tostring(item),
+			Font = Enum.Font.Gotham, TextSize = 12,
+			TextColor3 = T.Text, BackgroundColor3 = T.Card,
+			Position = UDim2.new(0, 4, 0, 4 + (i - 1) * 28),
+			Size = UDim2.new(1, -8, 0, 28),
+			AutoButtonColor = false, BorderSizePixel = 0,
+		}, 6)
+		b.MouseEnter:Connect(function()
+			tween(b, {BackgroundColor3 = T.CardHover, TextColor3 = T.Accent})
+		end)
+		b.MouseLeave:Connect(function()
+			tween(b, {BackgroundColor3 = T.Card, TextColor3 = T.Text})
+		end)
+		b.MouseButton1Click:Connect(function()
+			selected = item
+			sel.Text = tostring(item)
+			setOpen(false)
+			if cfg.Callback then
+				cfg.Callback(item)
 			end
-
-			function cfg.set(value) 
-				local selected = {}
-
-				local is_table = type(value) == "table"
-
-				for _,v in next, cfg.option_instances do 
-					if v.Text == value or (is_table and find(value, v.Text)) then 
-						insert(selected, v.Text)
-						cfg.multi_items = selected
-						v.TextColor3 = themes.preset.accent
-					else 
-						v.TextColor3 = themes.preset.text
-					end
-				end
-
-				text.Text = is_table and concat(selected, ", ") or selected[1] or "nun"
-				flags[cfg.flag] = is_table and selected or selected[1]
-				cfg.callback(flags[cfg.flag]) 
-			end
-			
-			function cfg:refresh_options(refreshed_list) 
-				for _, v in next, cfg.option_instances do 
-					v:Destroy() 
-				end
-
-				cfg.option_instances = {} 
-
-				for i,v in next, refreshed_list do 
-					local TextButton = library:create("TextButton", {
-						Parent = contrast,
-						FontFace = library.font,
-						TextColor3 = themes.preset.text,
-						BorderColor3 = rgb(0, 0, 0),
-						Size = dim2(1, 0, 0, 0),
-						BackgroundTransparency = 1,
-						BorderSizePixel = 0,
-						TextWrapped = true,
-						AutomaticSize = Enum.AutomaticSize.Y,
-						TextSize = 12,
-						TextXAlignment = Enum.TextXAlignment.Left,
-						ZIndex = 2, 
-						Text = v,
-						BackgroundColor3 = rgb(255, 255, 255)
-					}) library:apply_theme(TextButton, "accent", "TextColor3") 
-					
-					library:create("UIStroke", {
-						Parent = TextButton,
-						LineJoinMode = Enum.LineJoinMode.Miter
-					})
-
-					insert(cfg.option_instances, TextButton)
-
-					TextButton.MouseButton1Down:Connect(function()
-						if cfg.multi then 
-							local selected_index = find(cfg.multi_items, TextButton.Text)
-
-							if selected_index then 
-								remove(cfg.multi_items, selected_index)
-							else
-								insert(cfg.multi_items, TextButton.Text)
-							end
-
-							cfg.set(cfg.multi_items) 				
-						else 
-							cfg.set_visible(false)
-							cfg.open = false 
-
-							cfg.set(TextButton.Text)
-						end
-					end)
-				end
-			end
-
-			dropdown.MouseButton1Click:Connect(function()
-				cfg.open = not cfg.open 
-
-				cfg.set_visible(cfg.open)
-			end)
-
-			cfg:refresh_options(cfg.items) 
-
-			cfg.set(cfg.default)
-			
-			library.config_flags[cfg.flag] = cfg.set
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-
-			cfg.set_element_visible(cfg.visible)
-
-			return setmetatable(cfg, library)
-		end 
-
-		function library:list(options)
-			local cfg = {
-				callback = options and options.callback or function() end, 
-
-				scale = options.size or 232, 
-				items = options.items or {"1", "2", "3"}, 
-				-- order = options.order or 1, 
-				placeholdertext = options.placeholder or options.placeholdertext or "search here...",
-				visible = options.visible or true,
-
-				option_instances = {}, 
-				current_instance = nil, 
-				flag = options.flag or "flag", 
-
-			} 
-
-			-- instances 
-				local list_holder = library:create("TextLabel", {
-					Parent = self.holder,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					ZIndex = 2,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = list_holder,
-					Name = "",
-					PaddingLeft = dim(0, 1)
-				})
-				
-				local UIStroke = library:create("UIStroke", {
-					Parent = list_holder,
-					Name = ""
-				})
-				
-				local bottom_components = library:create("Frame", {
-					Parent = list_holder,
-					Name = "",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 26, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIListLayout", {
-					Parent = bottom_components,
-					Name = "",
-					Padding = dim(0, 10),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-				
-				local list = library:create("Frame", {
-					Parent = bottom_components,
-					Name = "",
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -27, 1, cfg.scale),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
-				
-				local inline = library:create("Frame", {
-					Parent = list,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-				
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				}) library:apply_theme(background, "accent", "BackgroundColor3") 
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-					rgbkey(0, rgb(255, 255, 255)),
-					rgbkey(1, rgb(167, 167, 167))
-				}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local contrast = library:create("Frame", {
-					Parent = background,
-					Name = "",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = contrast,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-				}) library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local ScrollingFrame = library:create("ScrollingFrame", {
-					Parent = contrast,
-					Name = "",
-					ScrollBarImageColor3 = themes.preset.accent,
-					Active = true,
-					MidImage = "rbxassetid://103468666327206",
-					TopImage = "rbxassetid://103468666327206",
-					BottomImage = "rbxassetid://103468666327206",
-					AutomaticCanvasSize = Enum.AutomaticSize.Y,
-					ScrollBarThickness = 2,
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 1, 0),
-					BackgroundColor3 = rgb(255, 255, 255),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					CanvasSize = dim2(0, 0, 0, 0)
-				}) library:apply_theme(ScrollingFrame, "accent", "ScrollBarImageColor3") 
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = ScrollingFrame,
-					Name = "",
-					PaddingBottom = dim(0, 4),
-					PaddingTop = dim(0, 4)
-				})
-				
-				local UIListLayout = library:create("UIListLayout", {
-					Parent = ScrollingFrame,
-					Name = "",
-					Padding = dim(0, 4),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			--  
-
-			function cfg.render_option(text) 
-				local TextButton = library:create("TextButton", {
-					Parent = ScrollingFrame,
-					Name = "",
-					Text = tostring(text),
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 0, 0),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				library:apply_theme(TextButton, "accent", "TextColor3") 
-
-				local UIStroke = library:create("UIStroke", {
-					Parent = TextButton,
-					Name = ""
-				})
-
-				return TextButton 
-			end 
-
-			function cfg.set_element_visible(bool)
-				list_holder.Visible = bool 
-			end
-
-			function cfg.refresh_options(options) 
-				if type(options) == "function" then 
-					return 
-				end 
-
-				for _, v in next, cfg.option_instances do 
-					v:Destroy() 
-				end 
-
-				for _, option in next, options do 
-					local button = cfg.render_option(option) 
-
-					insert(cfg.option_instances, button)
-
-					button.MouseButton1Click:Connect(function()
-						if cfg.current_instance and cfg.current_instance ~= button then 
-							cfg.current_instance.TextColor3 = themes.preset.text 
-						end 
-
-						cfg.current_instance = button 
-						button.TextColor3 = themes.preset.accent 
-
-						flags[cfg.flag] = button.text
-						
-						cfg.callback(button.text)
-					end)
-				end 
-			end     
-
-			function cfg.filter_options(text)
-				for _, v in next, cfg.option_instances do 
-					if string.find(v.Text, text) then 
-						v.Visible = true 
-					else 
-						v.Visible = false
-					end
-				end
-			end 
-
-			function cfg.set(value)
-				for _, buttons in next, cfg.option_instances do 
-					if buttons.Text == value then 
-						buttons.TextColor3 = themes.preset.accent 
-					else 
-						buttons.TextColor3 = themes.preset.text 
-					end 
-				end 
-
-				flags[cfg.flag] = value
-				cfg.callback(value)
-			end 
-
-			cfg.refresh_options(cfg.items) 
-			cfg.set_element_visible(cfg.visible)
-
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-			library.config_flags[cfg.flag] = cfg.set
-
-			return setmetatable(cfg, library)
-		end 
-
-		function library:textbox(options)
-			local cfg = {
-				placeholder = options.placeholder or options.placeholdertext or options.holder or options.holdertext or "type here...",
-				default = options.default,
-				flag = options.flag or "flag",
-				callback = options.callback or function() end,
-				visible = options.visible or true,
-			}
-			
-			-- instances 
-				local textbox_holder = library:create("TextLabel", {
-					Parent = self.holder,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					ZIndex = 2,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIPadding", {
-					Parent = textbox_holder,
-					Name = "",
-					PaddingLeft = dim(0, 1)
-				})
-				
-				library:create("UIStroke", {
-					Parent = textbox_holder,
-					Name = ""
-				})
-				
-				local button = library:create("Frame", {
-					Parent = textbox_holder,
-					Name = "",
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -27, 0, 18),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				})
-				library:hoverify(textbox_holder, button)
-				
-				library:apply_theme(button, "outline", "BackgroundColor3") 
-				
-				local inline = library:create("Frame", {
-					Parent = button,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					ZIndex = 2;
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				})
-				
-				library:apply_theme(inline, "inline", "BackgroundColor3") 
-				
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					ZIndex = 2;
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				})
-				
-				library:apply_theme(background, "accent", "BackgroundColor3") 
-				
-				local TextBox = library:create("TextBox", {
-					Parent = background,
-					Name = "",
-					CursorPosition = -1,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "", 
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					TextWrapped = true,
-					BackgroundTransparency = 1,
-					TextTruncate = Enum.TextTruncate.SplitWord,
-					PlaceholderText = "Type here...",
-					ClearTextOnFocus = false,
-					ZIndex = 3;
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIStroke", {
-					Parent = TextBox,
-					Name = ""
-				})
-				
-				local TextButton = library:create("TextButton", {
-					Parent = background,
-					Name = "",
-					FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-					TextColor3 = rgb(0, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					AutoButtonColor = false,
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					TextSize = 14,
-					ZIndex = 2;
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = TextButton,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(41, 41, 55)),
-						rgbkey(1, rgb(35, 35, 47))
-					}
-				})
-				
-				library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				library:create("UIListLayout", {
-					Parent = textbox_holder,
-					Name = "",
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					Padding = dim(0, 4),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-					
-				TextBox:GetPropertyChangedSignal("Text"):Connect(function()
-					flags[cfg.flag] = TextBox.text
-					cfg.callback(TextBox.text)
-				end)
-			-- 
-
-			function cfg.set_element_visible(bool)
-				textbox_holder.Visible = bool 
-			end
-
-			function cfg.set(text) 
-				flags[cfg.flag] = text
-				TextBox.Text = text
-				cfg.callback(text)
-			end 
-
-			if cfg.default then 
-				cfg.set(cfg.default) 
-			end 
-
-			cfg.set_element_visible(cfg.visible)
-
-			library.config_flags[cfg.flag] = cfg.set
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-
-			return setmetatable(cfg, library) 
-		end 
-
-		function library:button_holder(options) 
-			local cfg = {
-				flag = options.flag or "hi", 
-				visible = options.visible or true,
-			}
-
-			local button_holder = library:create("TextLabel", {
-				Parent = self.holder,
-				Name = "",
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = "",
-				ZIndex = 2,
-				Size = dim2(1, -8, 0, 12),
-				BorderSizePixel = 0,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				AutomaticSize = Enum.AutomaticSize.Y,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255), 
-			})
-
-			self.current_holder = button_holder
-
-			-- instances 
-				library:create("UIStroke", {
-					Parent = button_holder,
-					Name = ""
-				})
-				
-				library:create("UIListLayout", {
-					Parent = button_holder,
-					Name = "",
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					Padding = dim(0, 5),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			-- 
-			
-			function cfg.set_element_visible(bool)
-				button_holder.Visible = bool 
-			end
-
-			cfg.set_element_visible(cfg.visible)
-
-			library.visible_flags[cfg.flag] = cfg.set_element_visible
-
-			return setmetatable(cfg, library)
-		end 
-
-		function library:button(options)
-			local cfg = {
-				callback = options.callback or function() end, 
-				name = options.text or options.name or "Button",
-			}   
-
-			local button = library:create("TextButton", {
-				Parent = self.current_holder,
-				Name = "",
-				Position = dim2(0, 0, 0, 2),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -27, 0, 18),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.outline,
-				Text = ""
-			})
-
-			library:hoverify(button, button)
-			
-			library:apply_theme(button, "outline", "BackgroundColor3") 
-			
-			local inline = library:create("Frame", {
-				Parent = button,
-				Name = "",
-				ZIndex = 2;
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.inline
-			})
-			
-			library:apply_theme(inline, "inline", "BackgroundColor3") 
-			
-			local background = library:create("Frame", {
-				Parent = inline,
-				Name = "",
-				ZIndex = 2;
-				Position = dim2(0, 1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, -2, 1, -2),
-				BorderSizePixel = 0,
-				BackgroundColor3 = themes.preset.accent
-			})
-			
-			library:apply_theme(background, "accent", "BackgroundColor3") 
-			
-			local _UIGradient = library:create("UIGradient", {
-				Parent = background,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(255, 255, 255)),
-					rgbkey(1, rgb(167, 167, 167))
-				}
-			})
-			
-			library:apply_theme(_UIGradient, "contrast", "Color") 
-			
-			local contrast = library:create("Frame", {
-				Parent = background,
-				Name = "",
-				ZIndex = 2;
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(1, 0, 1, 0),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local UIGradient = library:create("UIGradient", {
-				Parent = contrast,
-				Name = "",
-				Rotation = 90,
-				Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-			})
-			
-			library:apply_theme(UIGradient, "contrast", "Color") 
-			
-			local text = library:create("TextLabel", {
-				Parent = contrast,
-				Name = "",
-				TextWrapped = true,
-				ZIndex = 2;
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = cfg.name,
-				Size = dim2(1, -4, 1, 0),
-				Position = dim2(0, 4, 0, -1),
-				BackgroundTransparency = 1,
-				TextTruncate = Enum.TextTruncate.AtEnd,
-				BorderSizePixel = 0,
-				FontFace = library.font,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local UIStroke = library:create("UIStroke", {
-				Parent = text,
-				Name = "",
-				LineJoinMode = Enum.LineJoinMode.Miter
-			})
-
-			button.MouseButton1Click:Connect(function()
-				cfg.callback() 
-			end)
-
-			return setmetatable(cfg, library)
-		end 
-
-		function library:label(options)
-			local cfg = {name = options.text or options.name or "Label"}
-
-			local dropdown = library:create("TextLabel", {
-				Parent = self.holder,
-				Name = "",
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = "",
-				ZIndex = 2,
-				Size = dim2(1, -8, 0, 12),
-				BorderSizePixel = 0,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				AutomaticSize = Enum.AutomaticSize.Y,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local UIStroke = library:create("UIStroke", {
-				Parent = dropdown,
-				Name = ""
-			})
-			
-			local left_components = library:create("Frame", {
-				Parent = dropdown,
-				Name = "",
-				BackgroundTransparency = 1,
-				Position = dim2(0, 2, 0, -1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(0, 0, 0, 14),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-			
-			local TextLabel = library:create("TextLabel", {
-				Parent = left_components,
-				Name = "",
-				FontFace = library.font,
-				TextColor3 = themes.preset.text,
-				BorderColor3 = rgb(0, 0, 0),
-				Text = cfg.name,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				BorderSizePixel = 0,
-				AutomaticSize = Enum.AutomaticSize.Y,
-				TextSize = 12,
-				BackgroundColor3 = rgb(255, 255, 255)
-			})
-
-			local right_components = library:create("Frame", {
-				Parent = dropdown,
-				Name = "right_components",
-				Position = dim2(1, -1, 0, 1),
-				BorderColor3 = rgb(0, 0, 0),
-				Size = dim2(0, 0, 0, 12),
-				BorderSizePixel = 0,
-				BackgroundColor3 = rgb(255, 255, 255)
-			}) cfg.right_holder = right_components
-
-			local list = library:create("UIListLayout", {
-				Parent = right_components,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalAlignment = Enum.HorizontalAlignment.Right,
-				Padding = dim(0, 4),
-				Name = "list",
-				SortOrder = Enum.SortOrder.LayoutOrder
-			})
-			
-			local UIStroke = library:create("UIStroke", {
-				Parent = TextLabel,
-				Name = ""
-			})
-
-			function cfg.set(text) 
-				TextLabel.Text = text 
-			end 
-						
-			return setmetatable(cfg, library)   
-		end 
-
-		function library:playerlist(options) 
-			local cfg = {
-				callback = options.callback or function() end, 
-
-				labels = {
-					name,
-					display, 
-					uid, 
-				}
-			}
-
-			local selected_button; 
-
-			local patterns = {
-				["Priority"] = rgb(255, 255, 0),
-				["Enemy"] = rgb(255, 0, 0),
-				["Neutral"] = themes.preset.text,
-				["Friendly"] = rgb(0, 255, 255)
-			}
-
-			-- elements 
-				local playerlist_holder = library:create("TextLabel", {
-					Parent = self.holder,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					ZIndex = 2,
-					Size = dim2(1, -8, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextYAlignment = Enum.TextYAlignment.Top,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = playerlist_holder,
-					Name = "",
-					PaddingBottom = dim(0, -2),
-					PaddingLeft = dim(0, 1)
-				})
-				
-				local UIStroke = library:create("UIStroke", {
-					Parent = playerlist_holder,
-					Name = ""
-				})
-				
-				local bottom_components = library:create("Frame", {
-					Parent = playerlist_holder,
-					Name = "",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 26, 0, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				library:create("UIListLayout", {
-					Parent = bottom_components,
-					Name = "",
-					Padding = dim(0, 10),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-				
-				local list = library:create("Frame", {
-					Parent = bottom_components,
-					Name = "",
-					Position = dim2(0, 0, 0, 2),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -27, 1, 232),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(list, "outline", "BackgroundColor3") 
-				
-				local inline = library:create("Frame", {
-					Parent = list,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.inline
-				}) library:apply_theme(inline, "inline", "BackgroundColor3") 
-				
-				local background = library:create("Frame", {
-					Parent = inline,
-					Name = "",
-					Position = dim2(0, 1, 0, 1),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, -2, 1, -2),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.accent
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = background,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-						rgbkey(0, rgb(255, 255, 255)),
-						rgbkey(1, rgb(167, 167, 167))
-					}
-				}); library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local contrast = library:create("Frame", {
-					Parent = background,
-					Name = "",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 1, 0),
-					BorderSizePixel = 0,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				
-				local UIGradient = library:create("UIGradient", {
-					Parent = contrast,
-					Name = "",
-					Rotation = 90,
-					Color = rgbseq{
-					rgbkey(0, rgb(41, 41, 55)),
-					rgbkey(1, rgb(35, 35, 47))
-				}
-				}); library:apply_theme(UIGradient, "contrast", "Color") 
-				
-				local ScrollingFrame = library:create("ScrollingFrame", {
-					Parent = contrast,
-					Name = "",
-					ScrollBarImageColor3 = themes.preset.accent,
-					Active = true,
-					MidImage = "rbxassetid://103468666327206",
-					TopImage = "rbxassetid://103468666327206",
-					BottomImage = "rbxassetid://103468666327206",
-					AutomaticCanvasSize = Enum.AutomaticSize.Y,
-					ScrollBarThickness = 2,
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 1, 0),
-					BackgroundColor3 = rgb(255, 255, 255),
-					BorderColor3 = rgb(0, 0, 0),
-					BorderSizePixel = 0,
-					CanvasSize = dim2(0, 0, 0, 0)
-				}) library:apply_theme(ScrollingFrame, "accent", "ScrollBarImageColor3") 
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = ScrollingFrame,
-					Name = "",
-					PaddingTop = dim(0, 4),
-					PaddingBottom = dim(0, 4),
-					PaddingRight = dim(0, 4),
-					PaddingLeft = dim(0, 4)
-				})
-				
-				local UIListLayout = library:create("UIListLayout", {
-					Parent = ScrollingFrame,
-					Name = "",
-					Padding = dim(0, 4),
-					SortOrder = Enum.SortOrder.LayoutOrder
-				})
-			-- 
-
-			function cfg.create_player(player) 
-				library.playerlist_data[tostring(player)] = {}
-				local path = library.playerlist_data[tostring(player)]
-				
-				local TextButton = library:create("TextButton", {
-					Parent = ScrollingFrame,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = "",
-					BackgroundTransparency = 1,
-					Size = dim2(1, 0, 0, 0),
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local player_name = library:create("TextLabel", {
-					Parent = TextButton,
-					FontFace = library.font,
-					TextColor3 = themes.preset.text,
-					BorderColor3 = rgb(0, 0, 0),
-					Text = tostring(player),
-					BorderSizePixel = 0,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextTruncate = Enum.TextTruncate.AtEnd,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextSize = 12,
-					LayoutOrder = -100, 
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-				library:apply_theme(player_name, "text", "TextColor3") 
-				library:apply_theme(player_name, "accent", "TextColor3") 
-								
-				-- local TextLabel = library:create("TextLabel", {
-				--     Parent = TextButton,
-				--     Name = "",
-				--     FontFace = library.font,
-				--     TextColor3 = themes.preset.text,
-				--     BorderColor3 = rgb(0, 0, 0),
-				--     Text = "None",
-				--     BackgroundTransparency = 1,
-				--     TextXAlignment = Enum.TextXAlignment.Left,
-				--     BorderSizePixel = 0,
-				--     AutomaticSize = Enum.AutomaticSize.Y,
-				--     TextSize = 12,
-				--     BackgroundColor3 = rgb(255, 255, 255)
-				-- })
-								
-				-- local Frame = library:create("Frame", {
-				--     Parent = TextLabel,
-				--     Name = "",
-				--     Position = dim2(0, -10, 0, 0),
-				--     BorderColor3 = rgb(0, 0, 0),
-				--     Size = dim2(0, 1, 0, 12),
-				--     BorderSizePixel = 0,
-				--     BackgroundColor3 = themes.preset.outline
-				-- }) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
-				
-				local priority_text = library:create("TextLabel", {
-					Parent = TextButton,
-					Name = "",
-					FontFace = library.font,
-					TextColor3 = tostring(player) ~= lp.Name and themes.preset.text or rgb(0, 0, 255),
-					BorderColor3 = rgb(0, 0, 0),
-					Text = tostring(player) ~= lp.Name and "Neutral" or "LocalPlayer",
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BorderSizePixel = 0,
-					AutomaticSize = Enum.AutomaticSize.Y,
-					TextSize = 12,
-					BackgroundColor3 = rgb(255, 255, 255)
-				})
-
-				local Frame = library:create("Frame", {
-					Parent = priority_text,
-					Name = "",
-					Position = dim2(0, -10, 0, 0),
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(0, 1, 0, 12),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
-				
-				local UIListLayout = library:create("UIListLayout", {
-					Parent = TextButton,
-					Name = "",
-					FillDirection = Enum.FillDirection.Horizontal,
-					HorizontalFlex = Enum.UIFlexAlignment.Fill,
-					SortOrder = Enum.SortOrder.LayoutOrder,
-					VerticalFlex = Enum.UIFlexAlignment.Fill
-				})
-				
-				local UIPadding = library:create("UIPadding", {
-					Parent = TextButton,
-					Name = "",
-					PaddingRight = dim(0, 2),
-					PaddingLeft = dim(0, 2)
-				})
-
-				local line = library:create("Frame", {
-					Parent = ScrollingFrame,
-					Name = "",
-					BorderColor3 = rgb(0, 0, 0),
-					Size = dim2(1, 0, 0, 1),
-					BorderSizePixel = 0,
-					BackgroundColor3 = themes.preset.outline
-				}) library:apply_theme(main_holder, "outline", "BackgroundColor3") 
-
-				path.instance = TextButton 
-				path.line = line 
-				path.priority = "Neutral"
-				path.priority_text = priority_text
-				-- library.selected_player = players[tostring(player)]
-				
-				TextButton.MouseButton1Click:Connect(function()
-					if player_name == lp.Name then 
-						return 
-					end 
-
-					if selected_button then 
-						selected_button.TextColor3 = themes.preset.text 
-						selected_button = nil 
-					end     
-
-					selected_button = player_name 
-					player_name.TextColor3 = themes.preset.accent 
-
-					library.selected_player = player_name.Text
-					library.config_flags["PLAYERLIST_DROPDOWN"](path.priority_text.Text)
-
-					if cfg.labels.name then 
-						cfg.labels.name.set("User: " .. player_name.Text)
-						cfg.labels.display.set("DisplayName: " .. players[player_name.Text].DisplayName)
-						cfg.labels.uid.set("User Id: " .. players[player_name.Text].UserId)
-					end
-				end)
-
-				return path 
-			end 
-
-			function cfg.search(text)
-				for _, player in next, players:GetPlayers() do 
-					local name = tostring(player)
-					local path = library.playerlist_data[name]
-
-					if path then 
-						local sanity = string.lower(name):match(string.lower(text)) and true or false
-						path.instance.Visible = sanity
-						path.line.Visible = sanity
-					end 
-				end 
-			end 
-
-			function cfg.remove_player(player) 
-				local path = library.playerlist_data[tostring(player)]
-				path.instance:Destroy() 
-				path.line:Destroy() 
-				path = nil 
-			end 
-
-			function library.prioritize(text) 
-				if not library.selected_player then 
-					return 
-				end 
-
-				local path = library.playerlist_data[library.selected_player]
-				path.priority_text.Text = text
-				path.priority_text.TextColor3 = patterns[text]
-				path.priority = text
-			end 
-
-			function library.get_priority(player) 
-				local path = library.playerlist_data[tostring(player)]
-
-				if path then 
-					return path.priority
-				end 
-			end 
-
-			players.PlayerAdded:Connect(cfg.create_player)
-			players.PlayerRemoving:Connect(cfg.remove_player)
-			
-			for _, player in players:GetPlayers() do 
-				local player_object = cfg.create_player(player.Name)
-				insert(library.playerlist_data, player_object)
-			end 
-
-			self:textbox({name = "Search", callback = function(txt)
-				cfg.search(txt)
-			end})
-			cfg.labels.name = self:label({name = "Name: ??"})
-			cfg.labels.display = self:label({name = "Display Name: ??"})
-			cfg.labels.uid = self:label({name = "User Id: ??"})
-
-			return setmetatable(cfg, library)
-		end 
-	-- 
--- 
-
-return library, themes; 
+		end)
+	end
+
+	r.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			setOpen(not open)
+		end
+	end)
+
+	return {
+		Set = function(v)
+			selected = v
+			sel.Text = tostring(v)
+		end,
+		Get = function() return selected end,
+	}
+end
+
+-- label — simple subtext row
+function library:Label(cfg)
+	cfg = cfg or {}
+	return mk("TextLabel", {
+		Parent = self._List, Text = cfg.Text or cfg.Name or "",
+		Font = Enum.Font.Gotham, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 16),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+end
+
+return library
