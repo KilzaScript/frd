@@ -432,10 +432,32 @@
 			return enum_table
 		end
 
-		function library:tween(obj, properties) 
-			local tween = tween_service:Create(obj, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, 0, false, 0), properties):Play()
+		function library:tween(obj, properties, info) 
+			local i = info or TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0)
+			local tween = tween_service:Create(obj, i, properties):Play()
 				
 			return tween
+		end 
+
+		-- smooth popup helper: fade + scale pop (C++-style eased transitions)
+		-- holder must be a CanvasGroup with a UIScale child
+		function library:popup_animate(holder, show)
+			local scale = holder:FindFirstChildOfClass("UIScale")
+			if show then
+				holder.Visible = true
+				holder.GroupTransparency = 1
+				if scale then scale.Scale = 0.92 end
+				library:tween(holder, {GroupTransparency = 0})
+				if scale then library:tween(scale, {Scale = 1}) end
+			else
+				library:tween(holder, {GroupTransparency = 1})
+				if scale then library:tween(scale, {Scale = 0.92}) end
+				task.delay(0.2, function()
+					if not holder:GetAttribute("open") then
+						holder.Visible = false
+					end
+				end)
+			end
 		end 
 
 		function library:config_list_update() 
@@ -536,7 +558,7 @@
 			-- smooth look: rounded corners on real surfaces only — thin 1-3px
 			-- accent/border strips are skipped so no dark gaps show through
 			pcall(function()
-				if ins:IsA("Frame") or ins:IsA("TextButton") or ins:IsA("ImageButton")
+				if ins:IsA("Frame") or ins:IsA("CanvasGroup") or ins:IsA("TextButton") or ins:IsA("ImageButton")
 					or ins:IsA("TextBox") or ins:IsA("ScrollingFrame") or ins:IsA("ImageLabel") then
 					local h = (typeof(options.Size) == "UDim2") and options.Size.Y.Offset or 99
 					if h > 3 then
@@ -1253,15 +1275,23 @@
 				if bool then 
 					for _,gui in opened do 
 						gui.Enabled = true 
-						opened = {}
 					end 
-				else
-					for _,gui in library.guis do 
-						if gui.Enabled then 
-							gui.Enabled = false
-							table.insert(opened, gui)
-						end
+					opened = {}
+					if window.pop then 
+						window.pop(true) 
 					end
+				else
+					if window.pop then 
+						window.pop(false) 
+					end
+					task.delay(0.18, function()
+						for _,gui in library.guis do 
+							if gui.Enabled then 
+								gui.Enabled = false
+								table.insert(opened, gui)
+							end
+						end
+					end)
 				end
 
 				library:tween(blur, {Size = bool and (flags["Blur Size"] or 15) or 0})
@@ -1556,6 +1586,17 @@
 							Position = dim2(0, 2, 0, 3),
 						})
 					end)
+				end
+
+				-- smooth window open/close pop (eased scale, C++-style feel)
+				local main_scale = library:create("UIScale", {Parent = main_window.items.main_holder, Scale = 1})
+				window.pop = function(show)
+					if show then
+						main_scale.Scale = 0.94
+						library:tween(main_scale, {Scale = 1})
+					else
+						library:tween(main_scale, {Scale = 0.94})
+					end
 				end
 
 				local items = main_window.items
@@ -2564,6 +2605,7 @@
 				})
 			
 				cfg["holder"] = section_holder
+				local tab_scale = library:create("UIScale", {Parent = section_holder, Scale = 1})
 
 				library:create("UIListLayout", {
 					Parent = section_holder,
@@ -2596,6 +2638,8 @@
 				button:FindFirstChildOfClass("TextLabel").TextColor3 = themes.preset.accent 
 
 				library.current_tab[2].Visible = true 
+				tab_scale.Scale = 0.985
+				library:tween(tab_scale, {Scale = 1})
 
 				if library.current_element_open and library.current_element_open ~= cfg then 
 					library.current_element_open.set_visible(false)
@@ -3501,7 +3545,7 @@
 			-- 
 
 			-- colorpicker instances
-				local colorpicker_holder = library:create("Frame", {
+				local colorpicker_holder = library:create("CanvasGroup", {
 					Parent = sgui,
 					Name = "colorpicker",
 					Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17),
@@ -3510,8 +3554,10 @@
 					BorderSizePixel = 0,
 					BackgroundColor3 = themes.preset.outline,
 					Visible = false,
-					ZIndex = 1
+					ZIndex = 1,
+					GroupTransparency = 1
 				}) library:apply_theme(colorpicker_holder, "outline", "BackgroundColor3") 
+			library:create("UIScale", {Parent = colorpicker_holder, Scale = 1})
 
 				library:make_resizable(colorpicker_holder)
 				
@@ -3890,8 +3936,6 @@
 			-- 
 				
 			function cfg.set_visible(bool)
-				colorpicker_holder.Visible = bool
-
 				if bool then 
 					if library.current_element_open and library.current_element_open ~= cfg then 
 						library.current_element_open.set_visible(false)
@@ -3900,6 +3944,11 @@
 
 					library.current_element_open = cfg
 					colorpicker_holder.Position = dim2(0, colorpicker_button.AbsolutePosition.X + 1, 0, colorpicker_button.AbsolutePosition.Y + 17)
+					colorpicker_holder:SetAttribute("open", true)
+					library:popup_animate(colorpicker_holder, true)
+				else
+					colorpicker_holder:SetAttribute("open", false)
+					library:popup_animate(colorpicker_holder, false)
 				end
 			end 
 
@@ -4134,7 +4183,7 @@
 			})
 			
 			-- mode selector
-				local keybind_selector = library:create("Frame", {
+				local keybind_selector = library:create("CanvasGroup", {
 					Parent = sgui,
 					Name = "",
 					Position = dim2(0, element_outline.AbsolutePosition.X + 1, 0, element_outline.AbsolutePosition.Y + 17),
@@ -4142,8 +4191,10 @@
 					BorderSizePixel = 2,
 					Visible = false, 
 					AutomaticSize = Enum.AutomaticSize.XY,
-					BackgroundColor3 = rgb(255, 255, 255)
+					BackgroundColor3 = rgb(255, 255, 255),
+					GroupTransparency = 1
 				})
+			library:create("UIScale", {Parent = keybind_selector, Scale = 1})
 				
 				library:create("UIListLayout", {
 					Parent = keybind_selector,
@@ -4246,7 +4297,6 @@
 
 			-- init 
 				function cfg.set_visible(bool)
-					keybind_selector.Visible = bool
 					keybind_selector.Position = dim2(0, element_outline.AbsolutePosition.X + 1, 0, element_outline.AbsolutePosition.Y + 17)
 
 					if bool then 
@@ -4256,6 +4306,11 @@
 						end
 
 						library.current_element_open = cfg 
+						keybind_selector:SetAttribute("open", true)
+						library:popup_animate(keybind_selector, true)
+					else
+						keybind_selector:SetAttribute("open", false)
+						library:popup_animate(keybind_selector, false)
 					end
 				end 
 
@@ -4662,7 +4717,7 @@
 			--
 
 			-- dropdown holder
-				local dropdown_holder = library:create("Frame", {
+				local dropdown_holder = library:create("CanvasGroup", {
 					Parent = sgui,
 					BorderColor3 = rgb(0, 0, 0),
 					Name = "dropdown_holder",
@@ -4672,8 +4727,10 @@
 					BorderSizePixel = 0,
 					AutomaticSize = cfg.scrolling and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
 					BackgroundColor3 = themes.preset.outline,
-					Visible = false
+					Visible = false,
+					GroupTransparency = 1
 				})
+				library:create("UIScale", {Parent = dropdown_holder, Scale = 1})
 				
 				local inline = library:create("Frame", {
 					Parent = dropdown_holder,
@@ -4784,8 +4841,6 @@
 			function cfg.set_visible(bool) 
 				library.current_element_open = cfg.ignore or cfg
 
-				dropdown_holder.Visible = bool
-
 				plus.Text = bool and "-" or "+"
 				plus.TextSize = bool and 12 or 8
 
@@ -4796,7 +4851,12 @@
 					end
 
 					dropdown_holder.Size = dim2(0, dropdown.AbsoluteSize.X, 0, dropdown_holder.Size.Y.Offset)
-					dropdown_holder.Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22)                    
+					dropdown_holder.Position = dim2(0, dropdown.AbsolutePosition.X + 1, 0, dropdown.AbsolutePosition.Y + 22)
+					dropdown_holder:SetAttribute("open", true)
+					library:popup_animate(dropdown_holder, true)
+				else
+					dropdown_holder:SetAttribute("open", false)
+					library:popup_animate(dropdown_holder, false)
 				end
 			end
 
