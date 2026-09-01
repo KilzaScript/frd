@@ -754,4 +754,409 @@ function library:Label(cfg)
 	})
 end
 
+
+-- ════════════════════════════════════════════════════════════════════
+--  Launcher  —  FLOW-style game-selection screen
+--  call:  library:Launcher({ Logo, Title, Author, Games })
+--  each game:  { Name, Desc, Icon (asset id), Load = function() end }
+-- ════════════════════════════════════════════════════════════════════
+function library:Launcher(cfg)
+	cfg = cfg or {}
+	local games = cfg.Games or {}
+	local accent = cfg.Accent or T.Accent
+
+	local gui = mk("ScreenGui", { Parent = holder, Name = "", DisplayOrder = 999997, IgnoreGuiInset = true })
+	local back = mk("Frame", {
+		Parent = gui, Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(6, 6, 10), BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+	})
+
+	-- ── window ──
+	local W, H = 760, 512
+	local win = mk("CanvasGroup", {
+		Parent = gui, Size = UDim2.fromOffset(W, H),
+		Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2),
+		BackgroundColor3 = T.Background, BorderSizePixel = 0, GroupTransparency = 1,
+	}, 16, true)
+	local wsc = mk("UIScale", { Parent = win, Scale = 0.92 })
+
+	-- ── header ──
+	local hd = mk("Frame", {
+		Parent = win, Size = UDim2.new(1, 0, 0, 56),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+	})
+	if cfg.Logo then
+		mk("ImageLabel", {
+			Parent = hd, Image = cfg.Logo, BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(28, 28), Position = UDim2.fromOffset(16, 14),
+		})
+	end
+	local tx = cfg.Logo and 54 or 18
+	mk("TextLabel", {
+		Parent = hd, Text = cfg.Title or "Launcher", Font = Enum.Font.GothamBold, TextSize = 15,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(tx, 8), Size = UDim2.fromOffset(320, 18),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	mk("TextLabel", {
+		Parent = hd, Text = "by " .. (cfg.Author or "guest"), Font = Enum.Font.Gotham, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(tx, 28), Size = UDim2.fromOffset(320, 14),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	local badge = mk("Frame", {
+		Parent = hd, AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -16, 0.5, 0), Size = UDim2.fromOffset(74, 22),
+		BackgroundColor3 = accent, BorderSizePixel = 0,
+	}, 999)
+	mk("TextLabel", {
+		Parent = badge, Text = "SECURE", Font = Enum.Font.GothamBold, TextSize = 11,
+		TextColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+	})
+
+	-- ── body: sidebar + content ──
+	local body = mk("Frame", {
+		Parent = win, Position = UDim2.new(0, 0, 0, 56),
+		Size = UDim2.new(1, 0, 1, -86), BackgroundTransparency = 1, BorderSizePixel = 0,
+	})
+
+	local sideW = 170
+	local side = mk("Frame", {
+		Parent = body, Size = UDim2.new(0, sideW, 1, 0),
+		BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+	})
+	mk("UIPadding", {
+		Parent = side, PaddingTop = UDim.new(0, 14),
+		PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 8),
+	})
+	mk("UIListLayout", { Parent = side, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder })
+
+	local content = mk("Frame", {
+		Parent = body, Position = UDim2.new(0, sideW, 0, 0),
+		Size = UDim2.new(1, -sideW, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
+	})
+
+	-- page system
+	local pages = {}
+	local nav = {}
+	local cur = 0
+	local function showPage(i)
+		if cur == i then return end
+		cur = i
+		for k, p in ipairs(pages) do
+			local on = (k == i)
+			tween(nav[k].B, { BackgroundColor3 = on and Color3.fromRGB(42, 42, 54) or T.Panel })
+			tween(nav[k].L, { TextColor3 = on and T.Text or T.SubText })
+			nav[k].Ind.Visible = on
+			if on then
+				p.Visible = true
+				p.GroupTransparency = 1
+				p.Position = UDim2.fromOffset(0, 10)
+				tween(p, { GroupTransparency = 0 })
+				tween(p, { Position = UDim2.fromOffset(0, 0) })
+			else
+				p.Visible = false
+			end
+		end
+	end
+
+	local function addNav(name, icon, badgeCount)
+		local b = mk("TextButton", {
+			Parent = side, Text = "", AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = T.Panel, BorderSizePixel = 0,
+		}, 8)
+		local ind = mk("Frame", {
+			Parent = b, Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 4, 0, 6),
+			BackgroundColor3 = accent, BorderSizePixel = 0, Visible = false,
+		})
+		mk("TextLabel", {
+			Parent = b, Text = icon, Font = Enum.Font.GothamBold, TextSize = 13,
+			TextColor3 = T.SubText, BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(10, 0), Size = UDim2.fromOffset(20, 32),
+		})
+		local lbl = mk("TextLabel", {
+			Parent = b, Text = name, Font = Enum.Font.Gotham, TextSize = 13,
+			TextColor3 = T.SubText, BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -46, 1, 0),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		if badgeCount and badgeCount > 0 then
+			mk("TextLabel", {
+				Parent = b, Text = tostring(badgeCount), Font = Enum.Font.GothamBold, TextSize = 11,
+				TextColor3 = Color3.new(1, 1, 1), AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(20, 16),
+				BackgroundColor3 = accent, BorderSizePixel = 0,
+			}, 999)
+		end
+		b.MouseButton1Click:Connect(function()
+			for k, nd in ipairs(nav) do
+				if nd.B == b then showPage(k) end
+			end
+		end)
+		nav[#nav + 1] = { B = b, L = lbl, Ind = ind }
+	end
+
+	local function makePage()
+		local p = mk("CanvasGroup", {
+			Parent = content, Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1, BorderSizePixel = 0,
+			Visible = false, GroupTransparency = 1,
+		})
+		mk("UIPadding", {
+			Parent = p, PaddingTop = UDim.new(0, 16),
+			PaddingLeft = UDim.new(0, 18), PaddingRight = UDim.new(0, 18),
+			PaddingBottom = UDim.new(0, 16),
+		})
+		pages[#pages + 1] = p
+		return p
+	end
+
+	-- reveal unhidden section marker (chunks appended below)
+-- ═══ GAMES PAGE ═══
+	local GPage = makePage()
+
+	-- toolbar: title + search
+	local tbTitle = mk("TextLabel", {
+		Parent = GPage, Text = "Games", Font = Enum.Font.GothamBold, TextSize = 20,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.new(0, 18, 0, 14), Size = UDim2.fromOffset(200, 22),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	local searchBox = mk("TextBox", {
+		Parent = GPage, Text = "", PlaceholderText = "Search games...",
+		PlaceholderColor3 = T.SubText, Font = Enum.Font.Gotham, TextSize = 13,
+		TextColor3 = T.Text, ClearTextOnFocus = false,
+		BackgroundColor3 = T.Card, BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -18, 0, 14), Size = UDim2.fromOffset(210, 30),
+	}, 8, true)
+	mk("UIPadding", { Parent = searchBox, PaddingLeft = UDim.new(0, 10) })
+
+	-- count row + separator
+	local countLbl = mk("TextLabel", {
+		Parent = GPage, Text = "", Font = Enum.Font.Gotham, TextSize = 12,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		Position = UDim2.new(0, 18, 0, 40), Size = UDim2.fromOffset(300, 14),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	mk("Frame", {
+		Parent = GPage, Size = UDim2.new(1, -36, 0, 1),
+		Position = UDim2.new(0, 18, 0, 62),
+		BackgroundColor3 = T.Stroke, BorderSizePixel = 0, Transparency = 0.4,
+	})
+
+	-- scrollable game list
+	local scroll = mk("ScrollingFrame", {
+		Parent = GPage, Position = UDim2.new(0, 18, 0, 72),
+		Size = UDim2.new(1, -36, 1, -88),
+		BackgroundTransparency = 1, BorderSizePixel = 0,
+		CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 3, ScrollBarImageColor3 = accent,
+		ScrollBarImageTransparency = 0.35,
+	})
+	local list = mk("Frame", {
+		Parent = scroll, Size = UDim2.new(1, 0, 0, 0),
+		BackgroundTransparency = 1, BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
+	})
+	mk("UIListLayout", { Parent = list, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder })
+
+	-- game card builder
+	local cards = {}
+	local function buildCard(gameDef, gi)
+		local card = mk("CanvasGroup", {
+			Parent = list, Size = UDim2.new(1, 0, 0, 66),
+			BackgroundColor3 = T.Card, BorderSizePixel = 0, GroupTransparency = 1,
+			ClipsDescendants = true,
+		}, 10, true)
+		local sc = mk("UIScale", { Parent = card, Scale = 0.98 })
+
+		-- icon (asset id or placeholder monogram)
+		if gameDef.Icon and gameDef.Icon ~= "" then
+			mk("ImageLabel", {
+				Parent = card, Image = gameDef.Icon, BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(42, 42), Position = UDim2.fromOffset(12, 12),
+			})
+		else
+			local mono = mk("Frame", {
+				Parent = card, Size = UDim2.fromOffset(42, 42), Position = UDim2.fromOffset(12, 12),
+				BackgroundColor3 = accent, BorderSizePixel = 0,
+			}, 8)
+			mono.BackgroundColor3 = Color3.fromRGB(60, 60, 76)
+			mk("TextLabel", {
+				Parent = mono, Text = string.sub(gameDef.Name or "?", 1, 1):upper(),
+				Font = Enum.Font.GothamBold, TextSize = 18,
+				TextColor3 = T.SubText, BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+			})
+		end
+
+		mk("TextLabel", {
+			Parent = card, Text = gameDef.Name or "Game",
+			Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = T.Text,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(66, 8), Size = UDim2.new(1, -150, 0, 20),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		})
+		mk("TextLabel", {
+			Parent = card, Text = gameDef.Desc or "", Font = Enum.Font.Gotham, TextSize = 12,
+			TextColor3 = T.SubText, BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(66, 30), Size = UDim2.new(1, -160, 0, 16),
+			TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+
+		local play = mk("TextButton", {
+			Parent = card, Text = "LOAD", Font = Enum.Font.GothamBold, TextSize = 11,
+			TextColor3 = Color3.new(1, 1, 1), AutoButtonColor = false,
+			AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0),
+			Size = UDim2.fromOffset(68, 28), BackgroundColor3 = accent, BorderSizePixel = 0,
+		}, 8)
+		local stripe = mk("Frame", {
+			Parent = card, Size = UDim2.new(0, 3, 1, 0),
+			BackgroundColor3 = accent, BorderSizePixel = 0, Visible = false,
+		})
+
+		-- entrance animation (staggered)
+		task.delay(gi * 0.04, function()
+			tween(card, { GroupTransparency = 0 })
+			tween(sc, { Scale = 1 })
+		end)
+
+		-- states
+		card.MouseEnter:Connect(function()
+			tween(card, { BackgroundColor3 = T.CardHover })
+			tween(stripe, { Visible = true })
+		end)
+		card.MouseLeave:Connect(function()
+			tween(card, { BackgroundColor3 = T.Card })
+			tween(stripe, { Visible = false })
+		end)
+		play.MouseButton1Click:Connect(function()
+			tween(play, { BackgroundColor3 = T.Card, TextColor3 = T.Accent })
+			task.delay(0.1, function()
+				tween(play, { BackgroundColor3 = accent, TextColor3 = Color3.new(1, 1, 1) })
+			end)
+			if gameDef.Load then
+				task.spawn(gameDef.Load)
+			end
+			if library.Notification then
+				library.Notification({ Title = "Loaded", Text = gameDef.Name .. " injected.", Time = 3 })
+			end
+		end)
+
+		cards[#cards + 1] = { Card = card, Name = gameDef.Name or "" }
+	end
+
+	for gi, g in ipairs(games) do
+		buildCard(g, gi)
+	end
+
+	-- search filter
+	searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local q = string.lower(searchBox.Text)
+		for _, c in ipairs(cards) do
+			local match = (q == "") or string.find(string.lower(c.Name), q, 1, true) ~= nil
+			c.Card.Visible = match
+		end
+	end)
+
+	countLbl.Text = #games .. " script" .. (#games == 1 and "" or "s") .. " loaded"
+	addNav("Games", "◉", #games)
+
+	-- marker: about/settings + footer + entrance appended below
+-- ═══ ABOUT PAGE ═══
+	local APage = makePage()
+	mk("TextLabel", {
+		Parent = APage, Text = "About", Font = Enum.Font.GothamBold, TextSize = 20,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.new(0, 18, 0, 12), Size = UDim2.fromOffset(200, 22),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	})
+	local aboutCard = mk("Frame", {
+		Parent = APage, Position = UDim2.new(0, 18, 0, 46),
+		Size = UDim2.new(1, -36, 0, 0), BackgroundColor3 = T.Card, BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
+	}, 10, true)
+	mk("UIPadding", { Parent = aboutCard, PaddingTop = UDim.new(0, 14),
+		PaddingBottom = UDim.new(0, 14), PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) })
+	mk("UIListLayout", { Parent = aboutCard, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder })
+	mk("TextLabel", { Parent = aboutCard, Text = "HATE", Font = Enum.Font.GothamBold, TextSize = 18,
+		TextColor3 = accent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20) })
+	mk("TextLabel", { Parent = aboutCard, Text = cfg.About or "A high-quality universal script library.",
+		Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = T.SubText, BackgroundTransparency = 1, TextWrapped = true,
+		Size = UDim2.new(1, 0, 0, 34) })
+	mk("TextLabel", { Parent = aboutCard, Text = "Cloaked · Executor friendly · Works across games",
+		Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = T.Text, BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 18) })
+	addNav("About", "ℹ", nil)
+
+	-- ═══ SETTINGS PAGE ═══
+	local SPage = makePage()
+	mk("TextLabel", { Parent = SPage, Text = "Settings", Font = Enum.Font.GothamBold, TextSize = 20,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.new(0, 18, 0, 12), Size = UDim2.fromOffset(200, 22),
+		TextXAlignment = Enum.TextXAlignment.Left })
+	local setList = mk("Frame", { Parent = SPage, Position = UDim2.new(0, 18, 0, 46),
+		Size = UDim2.new(1, -36, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0 })
+	mk("UIListLayout", { Parent = setList, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+	local st1 = mk("Frame", { Parent = setList, Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = T.Card, BorderSizePixel = 0 }, 8)
+	mk("TextLabel", { Parent = st1, Text = "Smooth mode", Font = Enum.Font.Gotham, TextSize = 13,
+		TextColor3 = T.Text, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -70, 1, 0), TextXAlignment = Enum.TextXAlignment.Left })
+	local pill = mk("Frame", { Parent = st1, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0),
+		Size = UDim2.fromOffset(36, 18), BackgroundColor3 = T.CardHover, BorderSizePixel = 0 }, 999)
+	local knob = mk("Frame", { Parent = pill, Size = UDim2.fromOffset(12, 12), Position = UDim2.fromOffset(3, 3),
+		BackgroundColor3 = T.SubText, BorderSizePixel = 0 }, 999)
+	local on = true
+	local function setOn(v)
+		on = v
+		tween(pill, { BackgroundColor3 = v and accent or T.CardHover })
+		tween(knob, { Position = v and UDim2.new(1, -15, 0, 3) or UDim2.fromOffset(3, 3),
+			BackgroundColor3 = v and Color3.new(1, 1, 1) or T.SubText })
+	end
+	local st1hit = mk("TextButton", { Parent = st1, Text = "", BackgroundTransparency = 1, BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1), AutoButtonColor = false })
+	st1hit.MouseButton1Click:Connect(function() setOn(not on) end)
+	setOn(true)
+	addNav("Settings", "◎", nil)
+
+	-- ── footer / status bar ──
+	local foot = mk("Frame", { Parent = win, Position = UDim2.new(0, 0, 1, -30),
+		Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = T.Panel, BorderSizePixel = 0 })
+	mk("Frame", { Parent = foot, Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = T.Stroke,
+		BorderSizePixel = 0, Transparency = 0.4 })
+	mk("TextLabel", { Parent = foot, Text = "CLOAKED · READY", Font = Enum.Font.GothamBold, TextSize = 10,
+		TextColor3 = accent, BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(18, 0), Size = UDim2.new(0, 140, 1, 0) })
+	mk("TextLabel", { Parent = foot, Text = "HATE v7.2", Font = Enum.Font.Gotham, TextSize = 11,
+		TextColor3 = T.SubText, BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -18, 0.5, 0), Size = UDim2.fromOffset(100, 14) })
+
+	-- default page (Games is index 1)
+	showPage(1)
+
+	-- entrance transition (loader hands off here)
+	tween(back, { BackgroundTransparency = 0.4 })
+	tween(win, { GroupTransparency = 0 }, BackOut)
+	tween(wsc, { Scale = 1 }, BackOut)
+
+	-- close / destroy
+	local function close()
+		tween(win, { GroupTransparency = 1 })
+		tween(wsc, { Scale = 0.92 })
+		tween(back, { BackgroundTransparency = 1 })
+		task.delay(0.25, function() gui:Destroy() end)
+	end
+
+	UIS.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if input.KeyCode == Enum.KeyCode.Insert or input.KeyCode == Enum.KeyCode.RightShift then
+			close()
+		end
+	end)
+
+	return { Gui = gui, Window = win, Close = close }
+end
+
 return library
