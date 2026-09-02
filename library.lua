@@ -364,11 +364,12 @@ function library.CreateWindow(cfg)
 	})
 
 	-- â•â•â• primitives â•â•â•
-	local function attachPress(b)
-		local sc = new("UIScale", { Parent = b, Scale = 1 })
-		b.MouseButton1Down:Connect(function() library.Animate(sc, { Scale = 0.97 }, "Fast") end)
-		b.MouseButton1Up:Connect(function() library.Animate(sc, { Scale = 1 }, "Fast") end)
-		b.MouseLeave:Connect(function() library.Animate(sc, { Scale = 1 }, "Fast") end)
+	local function attachPress(target, inputSource)
+		local sc = new("UIScale", { Parent = target, Scale = 1 })
+		local src = inputSource or target
+		src.MouseButton1Down:Connect(function() library.Animate(sc, { Scale = 0.97 }, "Fast") end)
+		src.MouseButton1Up:Connect(function() library.Animate(sc, { Scale = 1 }, "Fast") end)
+		src.MouseLeave:Connect(function() library.Animate(sc, { Scale = 1 }, "Fast") end)
 	end
 
 	-- â•â•â• page system â•â•â•
@@ -704,7 +705,6 @@ function library.CreateWindow(cfg)
 			BackgroundColor3 = P.Panel, BorderSizePixel = 0,
 		}, { Radius = 7 })
 		attachHover(row)
-		attachPress(row)
 
 		if cfg2.Icon and cfg2.Icon ~= "" then
 			new("ImageLabel", {
@@ -754,6 +754,7 @@ function library.CreateWindow(cfg)
 			Parent = row, Text = "", BackgroundTransparency = 1,
 			BorderSizePixel = 0, Size = UDim2.fromScale(1, 1),
 		})
+		attachPress(row, hit)
 		hit.MouseButton1Click:Connect(function()
 			library.Animate(row, { BackgroundColor3 = P.PanelSelected }, "Fast")
 			task.delay(0.15, function() library.Animate(row, { BackgroundColor3 = P.Panel }, "Fast") end)
